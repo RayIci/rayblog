@@ -43,7 +43,12 @@ const posts = (await getCollection("blog", ({ data }) => !data.draft)).sort(
               <CardContent>
                 <div class="flex flex-wrap gap-1">
                   {post.data.tags.map((tag) => (
-                    <Badge variant="outline">{tag}</Badge>
+                    <a
+                      href={`/blog/tags/${tag}`}
+                      onclick="event.stopPropagation()"
+                    >
+                      <Badge variant="outline">{tag}</Badge>
+                    </a>
                   ))}
                 </div>
               </CardContent>
