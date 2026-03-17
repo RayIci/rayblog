@@ -1,5 +1,18 @@
 {
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty'); [ -n \"$FILE\" ] && cd /home/alex/rayblog && bunx prettier --write \"$FILE\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
   }
 }

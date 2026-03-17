@@ -12,7 +12,15 @@ bun run build     # Build for production
 bun run preview   # Preview the production build
 ```
 
-There are no test or lint scripts configured.
+## Linting & Formatting
+
+```bash
+bun run lint          # ESLint across all .ts/.tsx/.astro files
+bun run format        # Prettier write (auto-run via hook on every file edit)
+bun run format:check  # Prettier check only
+```
+
+After finishing a set of code changes, run `bun run lint` and fix any errors before stopping.
 
 ## Architecture
 
