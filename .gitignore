@@ -34,3 +34,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# astro
+dist/
+.astro/
+
+# claude code
+.claude/settings.local.json
