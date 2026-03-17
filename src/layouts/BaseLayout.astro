@@ -7,7 +7,8 @@ interface Props {
   description?: string;
 }
 
-const { title, description = "RayBlog — personal knowledge base and blog" } = Astro.props;
+const { title, description = "RayBlog — personal knowledge base and blog" } =
+  Astro.props;
 ---
 
 <!doctype html>
@@ -21,18 +22,22 @@ const { title, description = "RayBlog — personal knowledge base and blog" } = 
     <!-- Prevent flash of wrong theme -->
     <script is:inline>
       const saved = localStorage.getItem("next-themes:theme");
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)",
+      ).matches;
       if (saved === "dark" || (!saved && prefersDark)) {
         document.documentElement.classList.add("dark");
       }
     </script>
   </head>
-  <body class="min-h-screen bg-background text-foreground antialiased">
+  <body class="bg-background text-foreground min-h-screen antialiased">
     <Header />
-    <main class="container mx-auto px-4 py-8 max-w-4xl">
+    <main class="container mx-auto max-w-4xl px-4 py-8">
       <slot />
     </main>
-    <footer class="border-t mt-16 py-8 text-center text-sm text-muted-foreground">
+    <footer
+      class="text-muted-foreground mt-16 border-t py-8 text-center text-sm"
+    >
       <p>Built with Astro &middot; {new Date().getFullYear()}</p>
     </footer>
   </body>

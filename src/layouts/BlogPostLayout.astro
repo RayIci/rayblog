@@ -19,14 +19,14 @@ const formattedDate = pubDate.toLocaleDateString("en-US", {
 
 <BaseLayout title={title} description={description}>
   <article class="prose prose-neutral dark:prose-invert max-w-none">
-    <header class="mb-8 not-prose">
-      <h1 class="text-4xl font-bold mb-2">{title}</h1>
-      <div class="flex items-center gap-3 text-sm text-muted-foreground">
+    <header class="not-prose mb-8">
+      <h1 class="mb-2 text-4xl font-bold">{title}</h1>
+      <div class="text-muted-foreground flex items-center gap-3 text-sm">
         <time datetime={pubDate.toISOString()}>{formattedDate}</time>
       </div>
       {
         tags.length > 0 && (
-          <div class="flex flex-wrap gap-2 mt-3">
+          <div class="mt-3 flex flex-wrap gap-2">
             {tags.map((tag) => (
               <Badge variant="secondary">{tag}</Badge>
             ))}

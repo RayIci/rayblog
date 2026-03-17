@@ -1,6 +1,12 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { getCollection } from "astro:content";
 
 const posts = (await getCollection("blog", ({ data }) => !data.draft))
@@ -11,9 +17,10 @@ const posts = (await getCollection("blog", ({ data }) => !data.draft))
 <BaseLayout title="Home">
   <!-- Hero -->
   <section class="py-16 text-center">
-    <h1 class="text-5xl font-bold mb-4">RayBlog</h1>
-    <p class="text-xl text-muted-foreground max-w-2xl mx-auto">
-      A personal knowledge base — things I've learned, reference notes, and essays I keep coming back to.
+    <h1 class="mb-4 text-5xl font-bold">RayBlog</h1>
+    <p class="text-muted-foreground mx-auto max-w-2xl text-xl">
+      A personal knowledge base — things I've learned, reference notes, and
+      essays I keep coming back to.
     </p>
   </section>
 
@@ -21,10 +28,10 @@ const posts = (await getCollection("blog", ({ data }) => !data.draft))
   {
     posts.length > 0 && (
       <section>
-        <h2 class="text-2xl font-semibold mb-6">Recent Posts</h2>
+        <h2 class="mb-6 text-2xl font-semibold">Recent Posts</h2>
         <div class="flex flex-col gap-4">
           {posts.map((post) => (
-            <a href={`/blog/${post.id}`} class="block group">
+            <a href={`/blog/${post.id}`} class="group block">
               <Card className="transition-shadow group-hover:shadow-md">
                 <CardHeader>
                   <CardTitle className="group-hover:text-primary transition-colors">
@@ -35,7 +42,7 @@ const posts = (await getCollection("blog", ({ data }) => !data.draft))
                   )}
                 </CardHeader>
                 <CardContent>
-                  <time class="text-sm text-muted-foreground">
+                  <time class="text-muted-foreground text-sm">
                     {post.data.pubDate.toLocaleDateString("en-US", {
                       year: "numeric",
                       month: "long",
@@ -48,7 +55,7 @@ const posts = (await getCollection("blog", ({ data }) => !data.draft))
           ))}
         </div>
         <div class="mt-8 text-center">
-          <a href="/blog" class="text-sm text-primary hover:underline">
+          <a href="/blog" class="text-primary text-sm hover:underline">
             View all posts →
           </a>
         </div>

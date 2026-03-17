@@ -24,7 +24,12 @@ function Toggle() {
 
 export function ThemeToggle() {
   return (
-    <NextThemesProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <NextThemesProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
       <Toggle />
     </NextThemesProvider>
   );

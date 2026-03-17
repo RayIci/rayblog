@@ -1,27 +1,33 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getCollection } from "astro:content";
 
 const posts = (await getCollection("blog", ({ data }) => !data.draft)).sort(
-  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
 );
 ---
 
 <BaseLayout title="Blog" description="All posts on RayBlog">
-  <h1 class="text-4xl font-bold mb-8">Blog</h1>
+  <h1 class="mb-8 text-4xl font-bold">Blog</h1>
   <div class="flex flex-col gap-4">
     {
       posts.map((post) => (
-        <a href={`/blog/${post.id}`} class="block group">
+        <a href={`/blog/${post.id}`} class="group block">
           <Card className="transition-shadow group-hover:shadow-md">
             <CardHeader>
               <div class="flex items-start justify-between gap-4">
                 <CardTitle className="group-hover:text-primary transition-colors">
                   {post.data.title}
                 </CardTitle>
-                <time class="text-sm text-muted-foreground shrink-0">
+                <time class="text-muted-foreground shrink-0 text-sm">
                   {post.data.pubDate.toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",

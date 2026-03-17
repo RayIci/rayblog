@@ -2,11 +2,16 @@
 import { ThemeToggle } from "@/components/ThemeToggle";
 ---
 
-<header class="border-b sticky top-0 z-40 bg-background/95 backdrop-blur">
-  <div class="container mx-auto px-4 max-w-4xl h-14 flex items-center justify-between">
+<header class="bg-background/95 sticky top-0 z-40 border-b backdrop-blur">
+  <div
+    class="container mx-auto flex h-14 max-w-4xl items-center justify-between px-4"
+  >
     <nav class="flex items-center gap-6">
-      <a href="/" class="font-semibold text-lg">RayBlog</a>
-      <a href="/blog" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <a href="/" class="text-lg font-semibold">RayBlog</a>
+      <a
+        href="/blog"
+        class="text-muted-foreground hover:text-foreground text-sm transition-colors"
+      >
         Blog
       </a>
     </nav>
