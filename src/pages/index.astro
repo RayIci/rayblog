@@ -1,63 +1,105 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import PostCard from "@/components/PostCard.astro";
+import { HeroSection } from "@/components/HeroSection";
 import { getCollection } from "astro:content";
+import { TAGS } from "@/lib/tags";
 
-const posts = (await getCollection("blog", ({ data }) => !data.draft))
+const allPosts = await getCollection("blog", ({ data }) => !data.draft);
+const posts = allPosts
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
-  .slice(0, 5);
+  .slice(0, 3);
+
+// Build tag counts
+const tagCounts = TAGS.reduce(
+  (acc, tag) => {
+    acc[tag] = allPosts.filter((p) => p.data.tags.includes(tag)).length;
+    return acc;
+  },
+  {} as Record<string, number>,
+);
+
+// Only show tags with at least one post
+const activeTags = TAGS.filter((tag) => tagCounts[tag] > 0);
 ---
 
 <BaseLayout title="Home">
   <!-- Hero -->
-  <section class="py-16 text-center">
-    <h1 class="mb-4 text-5xl font-bold">RayBlog</h1>
-    <p class="text-muted-foreground mx-auto max-w-2xl text-xl">
-      A personal knowledge base — things I've learned, reference notes, and
-      essays I keep coming back to.
-    </p>
-  </section>
+  <HeroSection client:load />
 
-  <!-- Recent Posts -->
+  <!-- Divider -->
+  <div
+    class="via-border my-4 h-px bg-gradient-to-r from-transparent to-transparent"
+  >
+  </div>
+
+  <!-- Latest Posts -->
   {
     posts.length > 0 && (
-      <section>
-        <h2 class="mb-6 text-2xl font-semibold">Recent Posts</h2>
-        <div class="flex flex-col gap-4">
-          {posts.map((post) => (
-            <a href={`/blog/${post.id}`} class="group block">
-              <Card className="transition-shadow group-hover:shadow-md">
-                <CardHeader>
-                  <CardTitle className="group-hover:text-primary transition-colors">
-                    {post.data.title}
-                  </CardTitle>
-                  {post.data.description && (
-                    <CardDescription>{post.data.description}</CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <time class="text-muted-foreground text-sm">
-                    {post.data.pubDate.toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </time>
-                </CardContent>
-              </Card>
-            </a>
+      <section class="py-12">
+        <div class="mb-8 flex items-center justify-between">
+          <div>
+            <h2 class="text-2xl font-semibold">Latest posts</h2>
+            <p class="text-muted-foreground mt-1 text-sm">
+              Fresh from the knowledge base
+            </p>
+          </div>
+          <a
+            href="/blog"
+            class="group text-muted-foreground hover:text-primary flex items-center gap-1 text-sm transition-colors"
+          >
+            View all
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="transition-transform group-hover:translate-x-0.5"
+            >
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+          </a>
+        </div>
+        <div class="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {posts.map((post, i) => (
+            <PostCard post={post} index={i} />
           ))}
         </div>
-        <div class="mt-8 text-center">
-          <a href="/blog" class="text-primary text-sm hover:underline">
-            View all posts →
-          </a>
+      </section>
+    )
+  }
+
+  <!-- Browse by topic -->
+  {
+    activeTags.length > 0 && (
+      <section class="py-12">
+        <div class="mb-8">
+          <h2 class="text-2xl font-semibold">Browse by topic</h2>
+          <p class="text-muted-foreground mt-1 text-sm">
+            Explore posts by category
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          {activeTags.map((tag) => (
+            <a
+              href={`/blog/tags/${tag}`}
+              class="group border-border/60 bg-card hover:border-primary/40 hover:bg-primary/5 hover:text-primary hover:shadow-primary/10 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm transition-all duration-200 hover:shadow-sm"
+            >
+              <span class="text-muted-foreground group-hover:text-primary/70 font-mono transition-colors">
+                #
+              </span>
+              <span class="font-medium">{tag}</span>
+              <span class="bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary ml-1 rounded-full px-1.5 py-0.5 font-mono text-xs transition-colors">
+                {tagCounts[tag]}
+              </span>
+            </a>
+          ))}
         </div>
       </section>
     )

@@ -1,6 +1,5 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { Badge } from "@/components/ui/badge";
 import { getCollection } from "astro:content";
 import { TAGS } from "@/lib/tags";
 
@@ -13,21 +12,32 @@ const tagCounts = TAGS.map((tag) => ({
 ---
 
 <BaseLayout title="Tags" description="Browse posts by tag">
-  <h1 class="mb-8 text-4xl font-bold">Tags</h1>
-  <div class="flex flex-wrap gap-3">
-    {
-      tagCounts.map(({ tag, count }) => (
-        <a href={`/blog/tags/${tag}`}>
-          <Badge
-            variant="outline"
-            className="text-sm px-3 py-1 cursor-pointer hover:bg-accent transition-colors"
-          >
-            #{tag}
-            <span class="text-muted-foreground ml-2">{count}</span>
-          </Badge>
-        </a>
-      ))
-    }
+  <div class="mb-10">
+    <h1 class="text-4xl font-bold tracking-tight">Tags</h1>
+    <p class="text-muted-foreground mt-2">Browse all topics</p>
   </div>
-  {tagCounts.length === 0 && <p class="text-muted-foreground">No tags yet.</p>}
+
+  {
+    tagCounts.length > 0 ? (
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+        {tagCounts.map(({ tag, count }) => (
+          <a
+            href={`/blog/tags/${tag}`}
+            class="group border-border/60 bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-primary/10 flex flex-col gap-1 rounded-xl border p-4 transition-all duration-200 hover:shadow-sm"
+          >
+            <span class="text-muted-foreground group-hover:text-primary font-mono text-lg font-semibold transition-colors">
+              #{tag}
+            </span>
+            <span class="text-muted-foreground text-sm">
+              {count} post{count !== 1 ? "s" : ""}
+            </span>
+          </a>
+        ))}
+      </div>
+    ) : (
+      <div class="text-muted-foreground py-24 text-center">
+        <p class="font-mono text-sm">No tags yet.</p>
+      </div>
+    )
+  }
 </BaseLayout>

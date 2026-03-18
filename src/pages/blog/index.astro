@@ -1,14 +1,8 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import PostCard from "@/components/PostCard.astro";
 import { getCollection } from "astro:content";
+import { TAGS } from "@/lib/tags";
 
 const posts = (await getCollection("blog", ({ data }) => !data.draft)).sort(
   (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
@@ -16,46 +10,46 @@ const posts = (await getCollection("blog", ({ data }) => !data.draft)).sort(
 ---
 
 <BaseLayout title="Blog" description="All posts on RayBlog">
-  <h1 class="mb-8 text-4xl font-bold">Blog</h1>
-  <div class="flex flex-col gap-4">
+  <!-- Header -->
+  <div class="mb-10">
+    <h1 class="text-4xl font-bold tracking-tight">Blog</h1>
+    <p class="text-muted-foreground mt-2">
+      {posts.length} post{posts.length !== 1 ? "s" : ""} and counting
+    </p>
+  </div>
+
+  <!-- Tag filter -->
+  <div class="mb-8 flex flex-wrap gap-2">
+    <a
+      href="/blog"
+      class="border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg border px-3 py-1 font-mono text-xs transition-colors"
+    >
+      all
+    </a>
     {
-      posts.map((post) => (
-        <a href={`/blog/${post.id}`} class="group block">
-          <Card className="transition-shadow group-hover:shadow-md">
-            <CardHeader>
-              <div class="flex items-start justify-between gap-4">
-                <CardTitle className="group-hover:text-primary transition-colors">
-                  {post.data.title}
-                </CardTitle>
-                <time class="text-muted-foreground shrink-0 text-sm">
-                  {post.data.pubDate.toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </time>
-              </div>
-              {post.data.description && (
-                <CardDescription>{post.data.description}</CardDescription>
-              )}
-            </CardHeader>
-            {post.data.tags.length > 0 && (
-              <CardContent>
-                <div class="flex flex-wrap gap-1">
-                  {post.data.tags.map((tag) => (
-                    <a
-                      href={`/blog/tags/${tag}`}
-                      onclick="event.stopPropagation()"
-                    >
-                      <Badge variant="outline">{tag}</Badge>
-                    </a>
-                  ))}
-                </div>
-              </CardContent>
-            )}
-          </Card>
+      TAGS.map((tag) => (
+        <a
+          href={`/blog/tags/${tag}`}
+          class="border-border/60 text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-primary rounded-lg border px-3 py-1 font-mono text-xs transition-colors"
+        >
+          #{tag}
         </a>
       ))
     }
   </div>
+
+  <!-- Posts grid -->
+  {
+    posts.length > 0 ? (
+      <div class="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {posts.map((post, i) => (
+          <PostCard post={post} index={i} />
+        ))}
+      </div>
+    ) : (
+      <div class="text-muted-foreground py-24 text-center">
+        <p class="font-mono text-sm">No posts yet.</p>
+      </div>
+    )
+  }
 </BaseLayout>

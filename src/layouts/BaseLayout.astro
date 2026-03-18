@@ -1,6 +1,7 @@
 ---
 import "../styles/global.css";
 import Header from "@/components/Header.astro";
+import { ClientRouter } from "astro:transitions";
 
 interface Props {
   title: string;
@@ -19,6 +20,7 @@ const { title, description = "RayBlog — personal knowledge base and blog" } =
     <meta name="description" content={description} />
     <title>{title} — RayBlog</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <ClientRouter />
     <!-- Prevent flash of wrong theme -->
     <script is:inline>
       const saved = localStorage.getItem("next-themes:theme");
@@ -32,13 +34,20 @@ const { title, description = "RayBlog — personal knowledge base and blog" } =
   </head>
   <body class="bg-background text-foreground min-h-screen antialiased">
     <Header />
-    <main class="container mx-auto max-w-4xl px-4 py-8">
+    <main
+      class="container mx-auto max-w-4xl px-4 pt-24 pb-16"
+      transition:animate="fade"
+    >
       <slot />
     </main>
     <footer
-      class="text-muted-foreground mt-16 border-t py-8 text-center text-sm"
+      class="border-border/40 text-muted-foreground border-t py-8 text-center text-sm"
     >
-      <p>Built with Astro &middot; {new Date().getFullYear()}</p>
+      <p>
+        Built with <span class="text-primary">Astro</span> &middot; {
+          new Date().getFullYear()
+        }
+      </p>
     </footer>
   </body>
 </html>
