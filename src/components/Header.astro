@@ -103,24 +103,17 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 </header>
 
 <script>
-  const btn = document.getElementById("mobile-menu-btn");
-  const menu = document.getElementById("mobile-menu");
-  const iconMenu = document.getElementById("icon-menu");
-  const iconClose = document.getElementById("icon-close");
+  // mq listener is not DOM-dependent; register only once for the lifetime of the tab
+  const mq = window.matchMedia("(min-width: 768px)");
+  mq.addEventListener("change", (e) => {
+    if (e.matches) closeMenuGlobal();
+  });
 
-  let isOpen = false;
-
-  function openMenu() {
-    isOpen = true;
-    menu?.classList.add("is-open");
-    iconMenu?.classList.add("opacity-0", "scale-75");
-    iconMenu?.classList.remove("opacity-100", "scale-100");
-    iconClose?.classList.add("opacity-100", "scale-100");
-    iconClose?.classList.remove("opacity-0", "scale-75");
-  }
-
-  function closeMenu() {
-    isOpen = false;
+  // closeMenuGlobal is used by the mq listener which outlives any single page load
+  function closeMenuGlobal() {
+    const menu = document.getElementById("mobile-menu");
+    const iconMenu = document.getElementById("icon-menu");
+    const iconClose = document.getElementById("icon-close");
     menu?.classList.remove("is-open");
     iconMenu?.classList.add("opacity-100", "scale-100");
     iconMenu?.classList.remove("opacity-0", "scale-75");
@@ -128,16 +121,39 @@ import { ThemeToggle } from "@/components/ThemeToggle";
     iconClose?.classList.remove("opacity-100", "scale-100");
   }
 
-  btn?.addEventListener("click", () => {
-    if (isOpen) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
-  });
+  // Re-initialize click listener after every navigation (astro:page-load fires on
+  // initial load AND after each ClientRouter navigation)
+  document.addEventListener("astro:page-load", () => {
+    const btn = document.getElementById("mobile-menu-btn");
+    const menu = document.getElementById("mobile-menu");
+    const iconMenu = document.getElementById("icon-menu");
+    const iconClose = document.getElementById("icon-close");
 
-  const mq = window.matchMedia("(min-width: 768px)");
-  mq.addEventListener("change", (e) => {
-    if (e.matches) closeMenu();
+    if (!btn) return;
+
+    let isOpen = false;
+
+    function openMenu() {
+      isOpen = true;
+      menu?.classList.add("is-open");
+      iconMenu?.classList.add("opacity-0", "scale-75");
+      iconMenu?.classList.remove("opacity-100", "scale-100");
+      iconClose?.classList.add("opacity-100", "scale-100");
+      iconClose?.classList.remove("opacity-0", "scale-75");
+    }
+
+    function closeMenu() {
+      isOpen = false;
+      menu?.classList.remove("is-open");
+      iconMenu?.classList.add("opacity-100", "scale-100");
+      iconMenu?.classList.remove("opacity-0", "scale-75");
+      iconClose?.classList.add("opacity-0", "scale-75");
+      iconClose?.classList.remove("opacity-100", "scale-100");
+    }
+
+    btn.addEventListener("click", () => {
+      if (isOpen) closeMenu();
+      else openMenu();
+    });
   });
 </script>
