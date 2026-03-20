@@ -9,7 +9,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // empty'); [ -n \"$FILE\" ] && cd /home/alex/rayblog && bunx prettier --write \"$FILE\" 2>/dev/null || true"
+            "command": "FILE=$(cat | jq -Rsr 'fromjson | .tool_input.file_path // empty' 2>/dev/null); [ -n \"$FILE\" ] && /home/alex/rayblog/node_modules/.bin/prettier --write \"$FILE\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/alex/rayblog && /home/alex/.bun/bin/bun run lint 2>&1; exit 0"
           }
         ]
       }
