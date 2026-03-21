@@ -41,10 +41,12 @@ const { title, description = "RayBlog — personal knowledge base and blog" } =
       }
     </script>
   </head>
-  <body class="bg-background text-foreground min-h-screen antialiased">
+  <body
+    class="bg-background text-foreground flex min-h-screen flex-col antialiased"
+  >
     <Header client:load posts={postsData} currentPath={Astro.url.pathname} />
     <main
-      class="container mx-auto max-w-4xl px-4 pt-28 pb-16"
+      class="container mx-auto w-full max-w-4xl grow px-4 pt-28 pb-16"
       transition:animate="fade"
     >
       <slot />
