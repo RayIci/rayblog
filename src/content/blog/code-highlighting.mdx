@@ -1,0 +1,127 @@
+---
+title: "Code Highlighting with Expressive Code"
+description: "A showcase of syntax highlighting, file tabs, line markers, and diff views powered by Expressive Code."
+pubDate: 2026-03-21
+tags: ["tooling", "astro"]
+---
+
+This blog now uses [Expressive Code](https://expressive-code.com) for all code blocks. It's a drop-in upgrade over plain Shiki — same zero-runtime cost, but with a much richer feature set.
+
+Here's what it can do.
+
+## Syntax highlighting
+
+TypeScript with full type inference, generics, and decorators highlighted correctly:
+
+```ts
+type Result<T, E = Error> = { ok: true; value: T } | { ok: false; error: E };
+
+async function fetchPost(id: string): Promise<Result<Post>> {
+  try {
+    const res = await fetch(`/api/posts/${id}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return { ok: true, value: await res.json() };
+  } catch (error) {
+    return { ok: false, error: error as Error };
+  }
+}
+```
+
+Shell commands read clearly too:
+
+```bash
+# Install dependencies and start the dev server
+bun install
+bun run dev
+```
+
+## File name tabs
+
+Add a `// filename` comment and it appears as a tab on the code block:
+
+```ts title="src/lib/utils.ts"
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+```
+
+```json title="tsconfig.json"
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  }
+}
+```
+
+## Line highlighting
+
+Mark specific lines to draw attention to what matters:
+
+```ts {3-5} title="src/middleware.ts"
+export async function onRequest({ locals, request }, next) {
+  const url = new URL(request.url);
+  if (url.pathname.startsWith("/admin")) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return next();
+}
+```
+
+## Diff view
+
+Show before/after changes with `ins` and `del` markers:
+
+```ts
+// Before: manual string concat
+- const url = "https://api.example.com/posts/" + id + "?format=json";
+
+// After: URL constructor
++ const url = new URL(`/posts/${id}`, "https://api.example.com");
++ url.searchParams.set("format", "json");
+```
+
+## CSS and config files
+
+```css title="src/styles/global.css"
+:root {
+  --primary: oklch(0.5 0.26 292);
+  --accent: oklch(0.5 0.22 265);
+  --radius: 0.625rem;
+}
+```
+
+## Line numbers
+
+All code blocks show line numbers by default. For short snippets where numbers add noise, you can opt out with `showLineNumbers=false`:
+
+```ts showLineNumbers=false
+const greeting = "hello world";
+console.log(greeting);
+```
+
+Combine line numbers with highlighting to make references unambiguous — "see line 4" means something when the number is right there:
+
+```ts title="src/content.config.ts" {4}
+import { defineCollection, z } from "astro:content";
+import { glob } from "astro/loaders";
+
+const blog = defineCollection({
+  loader: glob({ pattern: "**/*.{md,mdx}", base: "./src/content/blog" }),
+  schema: z.object({
+    title: z.string(),
+    pubDate: z.coerce.date(),
+    tags: z.array(z.string()).default([]),
+  }),
+});
+
+export const collections = { blog };
+```
+
+Every block gets a copy button automatically. Themes switch between light and dark alongside the rest of the site.

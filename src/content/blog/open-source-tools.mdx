@@ -1,0 +1,38 @@
+---
+title: "Open Source Tools I Actually Use"
+description: "A curated list of open source projects that are part of my regular workflow — with links to the repos."
+pubDate: 2026-03-21
+tags: ["open-source", "tooling"]
+---
+
+import GitHubCard from "@/components/GitHubCard.astro";
+
+These are the open source projects that show up in almost everything I build. Not a comprehensive list — just the ones I'd miss immediately if they disappeared.
+
+## The framework
+
+Astro is the foundation of this blog. It introduced the islands architecture pattern that makes it possible to ship near-zero JavaScript for content sites while still using React where interactivity is needed.
+
+<GitHubCard repo="withastro/astro" />
+
+## Styling
+
+Tailwind CSS v4 is a significant rethink of the original. Configuration moved from a JS file to CSS `@theme` directives, and the performance improvements from the Rust-based engine make hot reload feel instant even in large projects.
+
+<GitHubCard repo="tailwindlabs/tailwindcss" />
+
+## UI components
+
+shadcn/ui isn't a component library you install — it's a collection of components you copy into your project. The distinction matters: you own the code, you can change anything, and you're not locked into a package's release cycle. Built on Radix UI primitives with Tailwind for styling.
+
+<GitHubCard repo="shadcn-ui/ui" />
+
+## OG image generation
+
+Satori converts HTML and CSS to SVG, which makes it possible to generate Open Graph images at build time using the same design system as the rest of the site. Used by Vercel's `@vercel/og` under the hood.
+
+<GitHubCard repo="vercel/satori" />
+
+---
+
+These four projects cover framework, styling, components, and image generation — essentially the entire frontend stack. They're all actively maintained and have excellent documentation.

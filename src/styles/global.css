@@ -166,6 +166,22 @@
   html {
     @apply font-sans;
   }
+
+  /* Heading anchor links — show # on hover */
+  .prose :is(h1, h2, h3, h4) > a {
+    text-decoration: none;
+    color: inherit;
+  }
+  .prose :is(h1, h2, h3, h4) > a::before {
+    content: "#";
+    margin-right: 0.4em;
+    opacity: 0;
+    color: var(--primary);
+    transition: opacity 150ms ease;
+  }
+  .prose :is(h1, h2, h3, h4):hover > a::before {
+    opacity: 0.6;
+  }
   code,
   kbd,
   samp,
