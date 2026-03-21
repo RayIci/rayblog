@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "colorize": {
+      "source": "pbakaus/impeccable",
+      "sourceType": "github",
+      "computedHash": "a29101990cf8bddf1835159858cb9a1ebd3ac0011598cbed334f0f28c4aa67a2"
+    },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
