@@ -5,6 +5,7 @@ import Fuse from "fuse.js";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SearchBar } from "@/components/SearchBar";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export interface PostSearchData {
   id: string;
@@ -15,11 +16,13 @@ export interface PostSearchData {
 
 interface HeaderProps {
   posts: PostSearchData[];
+  currentPath: string;
 }
 
 const FADE = { duration: 0.2, ease: "easeInOut" } as const;
 
-export function Header({ posts }: HeaderProps) {
+export function Header({ posts, currentPath }: HeaderProps) {
+  const [isScrolled, setIsScrolled] = useState(false);
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -35,6 +38,14 @@ export function Header({ posts }: HeaderProps) {
       }),
     [posts],
   );
+
+  // Scroll detection
+  useEffect(() => {
+    const onScroll = () => setIsScrolled(window.scrollY > 30);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Update results whenever query changes
   useEffect(() => {
@@ -56,14 +67,19 @@ export function Header({ posts }: HeaderProps) {
     setIsMobileMenuOpen(false);
   }, []);
 
-  // Escape to close search
+  // Keyboard: Escape closes search, ⌘K / Ctrl+K opens it
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isSearchActive) handleClose();
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        handleOpen();
+      } else if (e.key === "Escape" && isSearchActive) {
+        handleClose();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isSearchActive, handleClose]);
+  }, [isSearchActive, handleOpen, handleClose]);
 
   // Click outside to close search
   useEffect(() => {
@@ -90,13 +106,22 @@ export function Header({ posts }: HeaderProps) {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  const frosted = isScrolled || isSearchActive;
   const showResults = isSearchActive && query.length > 0;
 
   return (
-    <header className="fixed inset-x-0 top-4 z-50 px-4">
-      <div ref={containerRef} className="mx-auto max-w-3xl">
+    <header className="fixed inset-x-0 top-5 z-50 px-4">
+      <div ref={containerRef} className="mx-auto max-w-4xl">
         {/* Nav pill */}
-        <nav className="border-border/40 bg-background/70 shadow-primary/5 relative flex h-12 items-center gap-2 rounded-2xl border px-4 shadow-lg backdrop-blur-xl">
+        <nav
+          className={cn(
+            "relative flex h-14 items-center gap-2 rounded-2xl border px-5",
+            "backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300",
+            frosted
+              ? "bg-background/70 border-border/40 shadow-primary/10 shadow-lg"
+              : "border-transparent bg-transparent shadow-none",
+          )}
+        >
           {/* Logo */}
           <motion.a
             href="/"
@@ -126,13 +151,24 @@ export function Header({ posts }: HeaderProps) {
           >
             <a
               href="/blog"
-              className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg px-3 py-1.5 text-sm transition-colors"
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-sm transition-colors",
+                currentPath.startsWith("/blog") &&
+                  !currentPath.startsWith("/blog/tags")
+                  ? "bg-muted text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
             >
               Blog
             </a>
             <a
               href="/blog/tags"
-              className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg px-3 py-1.5 text-sm transition-colors"
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-sm transition-colors",
+                currentPath.startsWith("/blog/tags")
+                  ? "bg-muted text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
             >
               Tags
             </a>
@@ -194,7 +230,7 @@ export function Header({ posts }: HeaderProps) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="border-border/40 bg-background/90 shadow-primary/5 mt-2 overflow-hidden rounded-2xl border shadow-lg backdrop-blur-xl"
+              className="border-border/40 bg-background/90 shadow-primary/5 mt-2 overflow-hidden rounded-2xl border shadow-lg backdrop-blur-md"
             >
               {query.length < 2 ? (
                 <p className="text-muted-foreground px-4 py-8 text-center text-sm">
@@ -260,16 +296,27 @@ export function Header({ posts }: HeaderProps) {
               transition={{ duration: 0.2, ease: "easeOut" }}
               className="mt-2"
             >
-              <div className="border-border/40 bg-background/80 shadow-primary/5 rounded-2xl border p-2 shadow-lg backdrop-blur-xl">
+              <div className="border-border/40 bg-background/80 shadow-primary/5 rounded-2xl border p-2 shadow-lg backdrop-blur-md">
                 <a
                   href="/blog"
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground block rounded-lg px-4 py-2.5 text-sm transition-colors"
+                  className={cn(
+                    "block rounded-lg px-4 py-2.5 text-sm transition-colors",
+                    currentPath.startsWith("/blog") &&
+                      !currentPath.startsWith("/blog/tags")
+                      ? "bg-muted text-foreground font-medium"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
                 >
                   Blog
                 </a>
                 <a
                   href="/blog/tags"
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground block rounded-lg px-4 py-2.5 text-sm transition-colors"
+                  className={cn(
+                    "block rounded-lg px-4 py-2.5 text-sm transition-colors",
+                    currentPath.startsWith("/blog/tags")
+                      ? "bg-muted text-foreground font-medium"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
                 >
                   Tags
                 </a>

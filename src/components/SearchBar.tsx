@@ -36,8 +36,11 @@ export function SearchBar({
         onClick={onFocus}
       >
         <Search className="text-muted-foreground pointer-events-none absolute left-2.5 size-3.5" />
-        <div className="bg-muted/50 text-muted-foreground/60 hover:bg-muted/80 w-full rounded-lg py-1.5 pr-3 pl-8 text-sm transition-colors">
-          Search posts…
+        <div className="bg-muted/50 hover:bg-muted/80 flex w-full items-center justify-between rounded-lg py-1.5 pr-2 pl-8 text-sm transition-colors">
+          <span className="text-muted-foreground/60">Search posts…</span>
+          <kbd className="text-muted-foreground/50 border-border/60 hidden rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none xl:inline">
+            ⌘K
+          </kbd>
         </div>
       </motion.div>
 
