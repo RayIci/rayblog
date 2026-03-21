@@ -18,7 +18,17 @@ export default defineConfig({
     react(),
     expressiveCode({
       themes: ["catppuccin-mocha", "catppuccin-latte"],
-      styleOverrides: { borderRadius: "0.625rem" },
+      styleOverrides: {
+        borderRadius: "0.625rem",
+        frames: {
+          editorTabBarBorderColor: "transparent",
+          editorTabBarBorderBottomColor: "transparent",
+          // Match tab bar bg to the active tab bg so the 1.5px transparent
+          // border on the tab doesn't show a contrasting color through it
+          editorTabBarBackground: ({ resolveSetting }) =>
+            resolveSetting("frames.editorActiveTabBackground"),
+        },
+      },
       plugins: [pluginLineNumbers()],
       defaultProps: /** @type {any} */ ({ showLineNumbers: true }),
     }),
