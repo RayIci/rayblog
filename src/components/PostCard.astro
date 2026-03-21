@@ -12,11 +12,11 @@ const { title, description, pubDate, tags, image } = post.data;
 
 // Deterministic gradient fallback based on index
 const gradients = [
-  "from-violet-600 via-purple-500 to-indigo-600",
-  "from-purple-600 via-fuchsia-500 to-violet-600",
-  "from-indigo-600 via-violet-500 to-purple-600",
-  "from-fuchsia-600 via-purple-500 to-violet-700",
-  "from-violet-700 via-indigo-500 to-purple-600",
+  "from-violet-700 via-violet-500 to-indigo-600",
+  "from-indigo-600 via-violet-500 to-violet-700",
+  "from-violet-600 via-indigo-500 to-violet-800",
+  "from-violet-800 via-violet-500 to-indigo-600",
+  "from-indigo-700 via-violet-500 to-violet-600",
 ];
 const gradient = gradients[index % gradients.length];
 
