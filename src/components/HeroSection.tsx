@@ -51,7 +51,7 @@ export function HeroSection() {
           variants={item}
           className="text-muted-foreground font-mono text-sm"
         >
-          software engineer &amp; writer
+          Software Engineer
         </motion.p>
 
         {/* Separator */}

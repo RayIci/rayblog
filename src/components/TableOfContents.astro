@@ -28,8 +28,7 @@ const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
         <li class={h.depth === 3 ? "pl-3" : ""}>
           <a
             href={`#${h.slug}`}
-            data-toc-link
-            class="text-muted-foreground hover:text-foreground aria-[current=true]:text-primary block text-xs leading-relaxed transition-colors"
+            class="text-muted-foreground hover:text-foreground block text-xs leading-relaxed transition-colors"
           >
             {h.text}
           </a>
@@ -38,38 +37,3 @@ const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
     }
   </ul>
 </nav>
-
-<script>
-  function initToc() {
-    const links =
-      document.querySelectorAll<HTMLAnchorElement>("[data-toc-link]");
-    if (!links.length) return;
-
-    const slugs = Array.from(links).map((l) =>
-      l.getAttribute("href")!.slice(1),
-    );
-    const headingEls = slugs
-      .map((id) => document.getElementById(id))
-      .filter(Boolean) as HTMLElement[];
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            links.forEach((l) => l.removeAttribute("aria-current"));
-            const active = document.querySelector(
-              `[data-toc-link][href="#${entry.target.id}"]`,
-            );
-            active?.setAttribute("aria-current", "true");
-          }
-        }
-      },
-      { rootMargin: "0px 0px -70% 0px" },
-    );
-
-    headingEls.forEach((el) => observer.observe(el));
-  }
-
-  initToc();
-  document.addEventListener("astro:page-load", initToc);
-</script>
