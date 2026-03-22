@@ -72,7 +72,7 @@ export function HeroSection() {
         {/* Social links */}
         <motion.div variants={item} className="flex items-center gap-3 pt-1">
           <a
-            href="https://github.com"
+            href="https://github.com/RayIci"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub"
@@ -81,7 +81,7 @@ export function HeroSection() {
             <Github className="h-4 w-4" />
           </a>
           <a
-            href="https://linkedin.com"
+            href="https://www.linkedin.com/in/alex-valle-247875242/"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="LinkedIn"
