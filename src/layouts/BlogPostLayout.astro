@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import TableOfContents from "@/components/TableOfContents.astro";
 import { ReadingProgress } from "@/components/ReadingProgress";
 import { ShareButton } from "@/components/ShareButton";
+import { BackToTop } from "@/components/BackToTop";
 
 interface Heading {
   depth: number;
@@ -223,4 +224,5 @@ const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
       }
     </footer>
   </article>
+  <BackToTop client:load />
 </BaseLayout>

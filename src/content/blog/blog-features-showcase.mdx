@@ -1,0 +1,166 @@
+---
+title: "Everything This Blog Can Do"
+description: "A showcase of all the components, syntax features, and integrations available in RayBlog — from code blocks to diagrams to embeds."
+pubDate: 2026-03-22
+tags: ["astro", "meta"]
+---
+
+import Callout from "@/components/Callout.astro";
+import { Mermaid } from "@/components/Mermaid";
+import YouTube from "@/components/YouTube.astro";
+import GitHubCard from "@/components/GitHubCard.astro";
+
+This post is a living reference for everything you can drop into an MDX post on this blog. Bookmark it, fork it, delete it — it's here so you have a working example of every feature in one place.
+
+---
+
+## Callout Boxes
+
+Use `<Callout>` with `type="note|tip|warning|danger"` and an optional `title` prop.
+
+<Callout type="note" title="A note">
+  Use this for supplementary context that doesn't interrupt the main flow.
+</Callout>
+
+<Callout type="tip" title="Pro tip">
+  Tips highlight best practices or shortcuts worth knowing.
+</Callout>
+
+<Callout type="warning" title="Heads up">
+  Warnings flag things that could cause confusion or subtle bugs.
+</Callout>
+
+<Callout type="danger" title="Danger zone">
+  Use this for destructive, irreversible, or security-critical actions.
+</Callout>
+
+---
+
+## Code Blocks
+
+Powered by [Expressive Code](https://expressive-code.com) with Catppuccin themes, line numbers, and titles.
+
+```ts title="src/lib/utils.ts"
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+```
+
+### Diff highlighting
+
+Mark added/removed lines with `ins` and `del` annotations:
+
+```ts title="example.ts" del={2} ins={3-4}
+function greet(name: string) {
+  return `Hello, ${name}`;
+  const greeting = `Hello, ${name}!`;
+  return greeting;
+}
+```
+
+---
+
+## Math / LaTeX
+
+Inline math: $E = mc^2$, rendered via KaTeX.
+
+Display math:
+
+$$
+\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+$$
+
+---
+
+## Footnotes
+
+GFM footnotes work out of the box.[^1] You can have multiple.[^2]
+
+[^1]: This is the first footnote. It can contain **formatted text** too.
+
+[^2]: Footnotes are rendered at the bottom of the post automatically.
+
+---
+
+## Diagrams with Mermaid
+
+<Mermaid
+  code={`
+flowchart LR
+    A[Write MDX] --> B{Has diagrams?}
+    B -- Yes --> C[Add Mermaid block]
+    B -- No --> D[Ship it]
+    C --> D
+`}
+/>
+
+---
+
+## GitHub Repository Card
+
+<GitHubCard repo="withastro/astro" />
+
+---
+
+## YouTube Embed
+
+A responsive, privacy-friendly embed (uses `youtube-nocookie.com`):
+
+<YouTube id="dQw4w9WgXcQ" title="Never Gonna Give You Up" />
+
+---
+
+## Table of Contents
+
+This post has enough `##` headings to trigger the TOC automatically (needs ≥ 3 h2/h3 headings). You should see it in the sidebar on wider screens.
+
+---
+
+## Prose Formatting
+
+Standard Markdown all works as expected.
+
+- **Bold**, _italic_, `inline code`, ~~strikethrough~~
+- [External links](https://astro.build) open normally
+- Ordered and unordered lists
+- Block quotes:
+
+> "The best documentation is working code."
+
+### Tables
+
+| Feature     | Status | Notes                  |
+| ----------- | ------ | ---------------------- |
+| Code blocks | ✅     | Expressive Code        |
+| Math        | ✅     | KaTeX                  |
+| Diagrams    | ✅     | Mermaid                |
+| Footnotes   | ✅     | GFM built-in           |
+| Embeds      | ✅     | YouTube, Tweet, GitHub |
+
+---
+
+## Back to Top
+
+Scroll back up and you should see the ↑ button appear in the bottom-right corner after scrolling past ~400px. Click it to smoothly return to the top.
+
+---
+
+## Series Support
+
+Posts can be grouped into a series using the `series` and `seriesOrder` frontmatter fields:
+
+```yaml
+series: "Building RayBlog"
+seriesOrder: 1
+```
+
+A numbered navigation block appears at the top of the post, linking all parts together.
+
+---
+
+## Feeds
+
+This blog publishes both an [RSS feed](/rss.xml) and a [JSON Feed](/feed.json) — subscribe in any feed reader.

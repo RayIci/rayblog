@@ -164,7 +164,7 @@
       );
   }
   html {
-    @apply font-sans;
+    @apply scroll-smooth font-sans;
   }
 
   /* Heading anchor links — show # on hover */

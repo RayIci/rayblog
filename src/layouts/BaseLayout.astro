@@ -77,6 +77,18 @@ const pageTitle = `${title} — RayBlog`;
       href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
       crossorigin="anonymous"
     />
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title="RayBlog RSS"
+      href="/rss.xml"
+    />
+    <link
+      rel="alternate"
+      type="application/feed+json"
+      title="RayBlog"
+      href="/feed.json"
+    />
     <ClientRouter />
     <!-- Prevent flash of wrong theme -->
     <script is:inline>
