@@ -6,54 +6,73 @@ const container = {
   hidden: {},
   show: {
     transition: {
-      staggerChildren: 0.1,
+      staggerChildren: 0.08,
     },
   },
 };
 
 const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+  hidden: { opacity: 0, y: 10 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as const },
+  },
+};
+
+const lineItem = {
+  hidden: { scaleX: 0, opacity: 0 },
+  show: {
+    scaleX: 1,
+    opacity: 1,
+    transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] as const },
+  },
 };
 
 export function HeroSection() {
   return (
-    <section className="relative py-16 md:py-24">
+    <section className="relative py-20 md:py-32">
       <motion.div
-        className="relative flex flex-col items-start gap-5"
+        className="relative flex flex-col items-start gap-4"
         variants={container}
         initial="hidden"
         animate="show"
       >
-        {/* Greeting */}
-        <motion.div variants={item} className="flex items-center gap-2">
-          <span className="border-primary/20 bg-primary/10 text-primary rounded-full border px-3 py-1 font-mono text-xs">
-            software engineer
-          </span>
-        </motion.div>
-
         {/* Name */}
         <motion.h1
           variants={item}
-          className="text-4xl font-bold tracking-tight md:text-6xl"
+          className="text-5xl leading-none font-bold tracking-tight md:text-7xl"
         >
-          Hi, I&apos;m <span className="gradient-text">Alex.</span>
+          Alex Valle<span className="gradient-text">.</span>
         </motion.h1>
+
+        {/* Role */}
+        <motion.p
+          variants={item}
+          className="text-muted-foreground font-mono text-sm"
+        >
+          software engineer &amp; writer
+        </motion.p>
+
+        {/* Separator */}
+        <motion.div
+          variants={lineItem}
+          className="bg-border/80 my-1 h-px w-full origin-left"
+        />
 
         {/* Tagline */}
         <motion.p
           variants={item}
-          className="text-muted-foreground max-w-xl text-base leading-relaxed md:text-lg"
+          className="text-muted-foreground max-w-lg text-base leading-relaxed"
         >
-          Personal knowledge base & engineering blog — things I keep looking up,
-          ideas I keep thinking about, and notes on tech, math, and AI that I
-          actually want to remember.
+          Personal knowledge base &amp; engineering blog — things I keep looking
+          up, ideas worth writing down, notes on tech and systems.
         </motion.p>
 
         {/* CTAs */}
         <motion.div
           variants={item}
-          className="flex flex-wrap items-center gap-3"
+          className="mt-1 flex flex-wrap items-center gap-2"
         >
           <Button asChild size="default">
             <a href="/blog">
@@ -70,24 +89,24 @@ export function HeroSection() {
         </motion.div>
 
         {/* Social links */}
-        <motion.div variants={item} className="flex items-center gap-3 pt-1">
+        <motion.div variants={item} className="flex items-center gap-2 pt-1">
           <a
             href="https://github.com/RayIci"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub"
-            className="border-border/60 text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary flex size-9 items-center justify-center rounded-lg border transition-colors"
+            className="border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground flex size-8 items-center justify-center rounded-lg border transition-colors"
           >
-            <Github className="h-4 w-4" />
+            <Github className="h-3.5 w-3.5" />
           </a>
           <a
             href="https://www.linkedin.com/in/alex-valle-247875242/"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="LinkedIn"
-            className="border-border/60 text-muted-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary flex size-9 items-center justify-center rounded-lg border transition-colors"
+            className="border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground flex size-8 items-center justify-center rounded-lg border transition-colors"
           >
-            <Linkedin className="h-4 w-4" />
+            <Linkedin className="h-3.5 w-3.5" />
           </a>
         </motion.div>
       </motion.div>

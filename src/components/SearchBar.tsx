@@ -33,7 +33,7 @@ export function SearchBar({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="bg-background/90 absolute inset-0 z-20 flex items-center gap-3 rounded-2xl px-4"
+            className="bg-background/95 absolute inset-0 z-20 flex items-center gap-3 rounded-xl px-4"
           >
             <Search className="text-muted-foreground size-4 shrink-0" />
             <input

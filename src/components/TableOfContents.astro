@@ -14,22 +14,22 @@ const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
 ---
 
 <nav
-  class="not-prose bg-muted/40 border-border/60 mb-8 rounded-xl border px-5 py-4"
+  class="not-prose border-border/50 mb-8 border-l-2 py-1 pl-4"
   aria-label="Table of contents"
 >
   <p
-    class="text-muted-foreground mb-3 text-xs font-semibold tracking-wider uppercase"
+    class="text-muted-foreground/60 mb-2.5 font-mono text-[10px] font-medium tracking-widest uppercase"
   >
     On this page
   </p>
-  <ul class="space-y-1.5">
+  <ul class="space-y-1">
     {
       toc.map((h) => (
-        <li class={h.depth === 3 ? "pl-4" : ""}>
+        <li class={h.depth === 3 ? "pl-3" : ""}>
           <a
             href={`#${h.slug}`}
             data-toc-link
-            class="text-muted-foreground hover:text-foreground aria-[current=true]:text-primary block text-sm transition-colors"
+            class="text-muted-foreground hover:text-foreground aria-[current=true]:text-primary block text-xs leading-relaxed transition-colors"
           >
             {h.text}
           </a>

@@ -115,10 +115,10 @@ export function Header({ posts, currentPath }: HeaderProps) {
         {/* Nav pill */}
         <nav
           className={cn(
-            "relative flex h-14 items-center gap-2 rounded-2xl border px-5",
+            "relative flex h-12 items-center gap-2 rounded-xl border px-4",
             "backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300",
             frosted
-              ? "bg-background/70 border-foreground/15 shadow-sm"
+              ? "bg-background/80 border-foreground/10 shadow-sm"
               : "border-transparent bg-transparent shadow-none",
           )}
         >
@@ -240,7 +240,7 @@ export function Header({ posts, currentPath }: HeaderProps) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
-              className="border-foreground/15 bg-background/90 shadow-primary/5 mt-2 overflow-hidden rounded-2xl border shadow-lg backdrop-blur-sm"
+              className="border-foreground/10 bg-background/95 mt-2 overflow-hidden rounded-xl border shadow-lg backdrop-blur-sm"
             >
               {query.length < 2 ? (
                 <p className="text-muted-foreground px-4 py-8 text-center text-sm">
@@ -306,7 +306,7 @@ export function Header({ posts, currentPath }: HeaderProps) {
               transition={{ duration: 0.2, ease: "easeOut" }}
               className="mt-2"
             >
-              <div className="border-foreground/15 bg-background/80 shadow-primary/5 rounded-2xl border p-2 shadow-lg backdrop-blur-sm">
+              <div className="border-foreground/10 bg-background/95 rounded-xl border p-2 shadow-lg backdrop-blur-sm">
                 <a
                   href="/blog"
                   className={cn(
