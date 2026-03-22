@@ -29,6 +29,11 @@ const { title, description = "RayBlog — personal knowledge base and blog" } =
     <meta name="description" content={description} />
     <title>{title} — RayBlog</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      crossorigin="anonymous"
+    />
     <ClientRouter />
     <!-- Prevent flash of wrong theme -->
     <script is:inline>

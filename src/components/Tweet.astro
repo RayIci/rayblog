@@ -1,0 +1,44 @@
+---
+interface Props {
+  id: string;
+}
+
+const { id } = Astro.props;
+
+interface OEmbedData {
+  html: string;
+  author_name: string;
+}
+
+let data: OEmbedData | null = null;
+try {
+  const res = await fetch(
+    `https://publish.twitter.com/oembed?url=https://twitter.com/x/status/${id}&omit_script=true&dnt=true`,
+  );
+  if (res.ok) data = await res.json();
+} catch {
+  // silently fall through to link fallback
+}
+---
+
+{
+  data ? (
+    <div class="not-prose my-6 flex justify-center">
+      <div set:html={data.html} />
+      <script
+        async
+        src="https://platform.twitter.com/widgets.js"
+        charset="utf-8"
+      />
+    </div>
+  ) : (
+    <a
+      href={`https://twitter.com/x/status/${id}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="text-primary not-prose my-6 block text-sm underline"
+    >
+      View tweet →
+    </a>
+  )
+}

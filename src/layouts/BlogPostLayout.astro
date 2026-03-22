@@ -1,6 +1,17 @@
 ---
+import { getCollection } from "astro:content";
 import BaseLayout from "./BaseLayout.astro";
 import { Badge } from "@/components/ui/badge";
+import TableOfContents from "@/components/TableOfContents.astro";
+import { ReadingProgress } from "@/components/ReadingProgress";
+import { ShareButton } from "@/components/ShareButton";
+import { GiscusComments } from "@/components/GiscusComments";
+
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
 
 interface Props {
   title: string;
@@ -8,18 +19,72 @@ interface Props {
   pubDate: Date;
   tags?: string[];
   minutesRead?: number;
+  series?: string;
+  seriesOrder?: number;
+  headings?: Heading[];
 }
 
-const { title, description, pubDate, tags = [], minutesRead } = Astro.props;
+const {
+  title,
+  description,
+  pubDate,
+  tags = [],
+  minutesRead,
+  series,
+  headings = [],
+} = Astro.props;
+
 const formattedDate = pubDate.toLocaleDateString("en-US", {
   year: "numeric",
   month: "long",
   day: "numeric",
 });
+
+// Extract slug from URL for prev/next, related, and edit link
+const slug = Astro.url.pathname.split("/").filter(Boolean).pop() ?? "";
+
+const allPosts = await getCollection("blog", (p) => !p.data.draft);
+const sorted = allPosts.sort(
+  (a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime(),
+);
+
+// Prev / Next (older = prev, newer = next)
+const currentIndex = sorted.findIndex((p) => p.id === slug);
+const prevPost = currentIndex >= 0 ? (sorted[currentIndex + 1] ?? null) : null;
+const nextPost = currentIndex >= 0 ? (sorted[currentIndex - 1] ?? null) : null;
+
+// Related posts — share at least one tag, exclude current
+const related = sorted
+  .filter((p) => p.id !== slug && p.data.tags.some((t) => tags.includes(t)))
+  .slice(0, 3);
+
+// Series posts — all entries in the same series, sorted by order
+const seriesPosts = series
+  ? allPosts
+      .filter((p) => p.data.series === series)
+      .sort((a, b) => (a.data.seriesOrder ?? 0) - (b.data.seriesOrder ?? 0))
+  : [];
+
+const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
 ---
 
 <BaseLayout title={title} description={description}>
+  <ReadingProgress client:load />
+
+  <script>
+    import mediumZoom from "medium-zoom";
+    const zoom = mediumZoom(".prose img:not(.no-zoom)", {
+      margin: 24,
+      background: "var(--background)",
+    });
+    document.addEventListener("astro:page-load", () => {
+      zoom.detach();
+      zoom.attach(".prose img:not(.no-zoom)");
+    });
+  </script>
+
   <article class="prose prose-neutral dark:prose-invert max-w-none">
+    <!-- Header -->
     <header class="not-prose mb-8">
       <h1 class="mb-2 text-4xl font-bold">{title}</h1>
       <div class="text-muted-foreground flex items-center gap-3 text-sm">
@@ -39,6 +104,131 @@ const formattedDate = pubDate.toLocaleDateString("en-US", {
         )
       }
     </header>
+
+    <!-- Series navigation -->
+    {
+      seriesPosts.length > 1 && (
+        <div class="not-prose border-border/60 bg-muted/30 mb-8 rounded-xl border p-4">
+          <p class="text-muted-foreground mb-2 text-xs font-semibold tracking-wider uppercase">
+            Series: {series}
+          </p>
+          <ol class="space-y-1">
+            {seriesPosts.map((p, i) => (
+              <li class="flex items-baseline gap-2 text-sm">
+                <span class="text-muted-foreground/50 w-4 shrink-0 text-right font-mono text-xs">
+                  {i + 1}.
+                </span>
+                {p.id === slug ? (
+                  <span class="text-foreground font-medium">
+                    {p.data.title}
+                  </span>
+                ) : (
+                  <a
+                    href={`/blog/${p.id}`}
+                    class="text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {p.data.title}
+                  </a>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )
+    }
+
+    <!-- Table of Contents -->
+    {toc.length >= 3 && <TableOfContents headings={headings} />}
+
+    <!-- Post body -->
     <slot />
+
+    <!-- Post footer -->
+    <footer class="not-prose border-border/40 mt-12 space-y-10 border-t pt-8">
+      <!-- Edit on GitHub + Share -->
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <a
+          href={`https://github.com/RayIci/rayblog/blob/main/src/content/blog/${slug}.mdx`}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-muted-foreground hover:text-foreground text-sm transition-colors"
+        >
+          Edit on GitHub →
+        </a>
+        <ShareButton client:load title={title} />
+      </div>
+
+      <!-- Related posts -->
+      {
+        related.length > 0 && (
+          <div>
+            <p class="text-muted-foreground mb-4 text-xs font-semibold tracking-wider uppercase">
+              You might also like
+            </p>
+            <div class="grid gap-3 sm:grid-cols-3">
+              {related.map((p) => (
+                <a
+                  href={`/blog/${p.id}`}
+                  class="border-border/60 bg-card hover:border-primary/30 group rounded-xl border p-3 transition-colors"
+                >
+                  <p class="group-hover:text-primary line-clamp-2 text-sm font-semibold transition-colors">
+                    {p.data.title}
+                  </p>
+                  {p.data.description && (
+                    <p class="text-muted-foreground mt-1 line-clamp-2 text-xs">
+                      {p.data.description}
+                    </p>
+                  )}
+                </a>
+              ))}
+            </div>
+          </div>
+        )
+      }
+
+      <!-- Prev / Next navigation -->
+      {
+        (prevPost || nextPost) && (
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              {prevPost && (
+                <a
+                  href={`/blog/${prevPost.id}`}
+                  class="border-border/60 bg-card hover:border-primary/30 group flex flex-col gap-1 rounded-xl border p-4 transition-colors"
+                >
+                  <span class="text-muted-foreground text-xs">← Previous</span>
+                  <span class="group-hover:text-primary line-clamp-2 text-sm font-semibold transition-colors">
+                    {prevPost.data.title}
+                  </span>
+                </a>
+              )}
+            </div>
+            <div>
+              {nextPost && (
+                <a
+                  href={`/blog/${nextPost.id}`}
+                  class="border-border/60 bg-card hover:border-primary/30 group flex flex-col items-end gap-1 rounded-xl border p-4 text-right transition-colors"
+                >
+                  <span class="text-muted-foreground text-xs">Next →</span>
+                  <span class="group-hover:text-primary line-clamp-2 text-sm font-semibold transition-colors">
+                    {nextPost.data.title}
+                  </span>
+                </a>
+              )}
+            </div>
+          </div>
+        )
+      }
+
+      <!-- Giscus comments -->
+      <div>
+        <p
+          class="text-muted-foreground mb-4 text-xs font-semibold tracking-wider uppercase"
+        >
+          Comments
+        </p>
+        <GiscusComments client:only="react" />
+      </div>
+    </footer>
   </article>
 </BaseLayout>

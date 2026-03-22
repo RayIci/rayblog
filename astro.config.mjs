@@ -10,6 +10,8 @@ import { pluginLineNumbers } from "@expressive-code/plugin-line-numbers";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import { remarkReadingTime } from "./src/plugins/remark-reading-time.mjs";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 
 // https://astro.build/config
 export default defineConfig({
@@ -37,8 +39,12 @@ export default defineConfig({
   ],
 
   markdown: {
-    remarkPlugins: [remarkReadingTime],
-    rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
+    remarkPlugins: [remarkReadingTime, remarkMath],
+    rehypePlugins: [
+      rehypeSlug,
+      [rehypeAutolinkHeadings, { behavior: "wrap" }],
+      rehypeKatex,
+    ],
   },
 
   vite: {

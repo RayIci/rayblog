@@ -188,6 +188,39 @@
   pre {
     @apply font-mono;
   }
+
+  kbd {
+    display: inline-block;
+    padding: 0.15em 0.4em;
+    font-size: 0.8em;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 0.3rem;
+    background: var(--muted);
+    color: var(--foreground);
+    line-height: 1.4;
+  }
+}
+
+@media print {
+  header,
+  footer,
+  nav,
+  .expressive-code .copy {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    background-image: none !important;
+  }
+  .prose {
+    max-width: 100% !important;
+  }
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    opacity: 0.6;
+  }
 }
 
 /* Mobile menu animation — driven by plain CSS so the grid-rows transition is

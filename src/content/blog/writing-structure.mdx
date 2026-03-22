@@ -5,13 +5,20 @@ pubDate: 2026-03-21
 tags: ["writing", "meta"]
 ---
 
-Good structure is what separates a post you can scan from one you have to read start to finish to find what you need. This is a note on the patterns I've settled on.
+import Callout from "@/components/Callout.astro";
+
+Good structure is what separates a post you can scan from one you have to read start to finish to find what you need. This is a note on the patterns I've settled on — and a showcase of some of the components available in this blog.
 
 ## The problem with flat writing
 
 Most first drafts come out flat — a sequence of paragraphs with no internal hierarchy. That's fine for a journal entry, but it doesn't serve someone arriving with a specific question.
 
 Without headings, a reader has two choices: read everything, or leave. Headings create a third option: skim the structure, then dive into the section that matters.
+
+<Callout type="tip" title="Start with an outline">
+  Before writing any long post, I dump the H2 headings first. If I can't write
+  five meaningful headings, the post isn't ready to write yet.
+</Callout>
 
 ## What headings actually do
 
@@ -40,6 +47,51 @@ A good test: can a reader understand the H3 without reading the H2 above it? If 
 Every heading on this blog has a permanent anchor link. Hover over any heading and a `#` will appear — click it to copy a direct link to that section.
 
 This makes it easy to share a specific part of a long post, or to link to a section from elsewhere on the site.
+
+## Callout blocks
+
+Callouts let you pull important notes out of the flow of prose. There are four types:
+
+<Callout type="note" title="Note">
+  Use this for supplementary information that's useful but not critical to the
+  main argument.
+</Callout>
+
+<Callout type="tip" title="Tip">
+  Practical advice or shortcuts the reader might appreciate.
+</Callout>
+
+<Callout type="warning" title="Warning">
+  Something the reader should be careful about before proceeding.
+</Callout>
+
+<Callout type="danger" title="Danger">
+  This action is destructive or irreversible. Make sure you know what you're
+  doing.
+</Callout>
+
+## Math rendering
+
+This blog supports LaTeX math via KaTeX. Inline formulas look like $E = mc^2$ and are rendered inline with the text. Block formulas are centered on their own line:
+
+$$
+\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+$$
+
+Inline: the quadratic formula is $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$.
+
+<Callout type="note">
+  KaTeX renders at build time, so there's no client-side JavaScript cost for
+  math rendering.
+</Callout>
+
+## Keyboard shortcuts
+
+Use `<kbd>` tags for keyboard shortcuts: press <kbd>Ctrl</kbd> + <kbd>K</kbd> to open search, or <kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> in VS Code to open the command palette.
+
+## Footnotes
+
+Markdown supports footnotes[^1] natively. They're useful for asides that would break the flow of prose if included inline, or for citations[^2].
 
 ## Paragraph length
 
@@ -74,3 +126,7 @@ The exception is long reference posts where a "Summary" or "TL;DR" at the end se
 These patterns aren't fixed. They've evolved from writing consistently and paying attention to what works. The main thing that's shifted is the direction: I used to default to more structure — more headings, more lists — and I've moved toward using structure only when it earns its place.
 
 The goal is a post that reads cleanly even if you strip out every heading. The headings are there for navigation, not to hold the writing together.
+
+[^1]: Footnotes appear at the bottom of the page with a back-link. Use them for tangents that would interrupt the main thread.
+
+[^2]: For academic-style citations, footnotes are the conventional place. For links, inline anchors usually work better.
