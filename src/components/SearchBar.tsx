@@ -6,7 +6,6 @@ interface SearchBarProps {
   isActive: boolean;
   query: string;
   onChange: (q: string) => void;
-  onFocus: () => void;
   onClose: () => void;
 }
 
@@ -14,7 +13,6 @@ export function SearchBar({
   isActive,
   query,
   onChange,
-  onFocus,
   onClose,
 }: SearchBarProps) {
   const overlayInputRef = useRef<HTMLInputElement>(null);
@@ -27,23 +25,6 @@ export function SearchBar({
 
   return (
     <>
-      {/* Compact desktop input — always in flex flow on md+, acts as a trigger */}
-      <motion.div
-        className="relative hidden flex-1 cursor-pointer items-center md:flex"
-        animate={{ opacity: isActive ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        style={{ pointerEvents: isActive ? "none" : "auto" }}
-        onClick={onFocus}
-      >
-        <Search className="text-muted-foreground pointer-events-none absolute left-2.5 size-3.5" />
-        <div className="bg-muted/50 hover:bg-muted/80 flex w-full items-center justify-between rounded-lg py-1.5 pr-2 pl-8 text-sm transition-colors">
-          <span className="text-muted-foreground/60">Search posts…</span>
-          <kbd className="text-muted-foreground/50 border-border/60 hidden rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none xl:inline">
-            ⌘K
-          </kbd>
-        </div>
-      </motion.div>
-
       {/* Active overlay — covers full nav when search is open */}
       <AnimatePresence>
         {isActive && (

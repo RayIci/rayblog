@@ -133,22 +133,23 @@ export function Header({ posts, currentPath }: HeaderProps) {
             RayBlog
           </motion.a>
 
-          {/* Search bar — compact on desktop, overlay when active */}
-          <SearchBar
-            isActive={isSearchActive}
-            query={query}
-            onChange={setQuery}
-            onFocus={handleOpen}
-            onClose={handleClose}
-          />
-
-          {/* Desktop nav links */}
+          {/* Desktop nav group: search bar + Blog + Tags + ThemeToggle */}
           <motion.div
             animate={{ opacity: isSearchActive ? 0 : 1 }}
             transition={FADE}
             style={{ pointerEvents: isSearchActive ? "none" : "auto" }}
-            className="hidden shrink-0 items-center gap-1 md:flex"
+            className="ml-auto hidden shrink-0 items-center gap-1 md:flex"
           >
+            {/* Compact search bar */}
+            <div className="relative cursor-pointer" onClick={handleOpen}>
+              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+              <div className="bg-muted/50 hover:bg-muted/80 border-border/40 flex w-36 items-center justify-between rounded-lg border py-1.5 pr-2 pl-8 text-sm transition-colors">
+                <span className="text-muted-foreground/60">Search…</span>
+                <kbd className="text-muted-foreground/50 border-border/60 rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none">
+                  ⌘K
+                </kbd>
+              </div>
+            </div>
             <a
               href="/blog"
               className={cn(
@@ -172,14 +173,15 @@ export function Header({ posts, currentPath }: HeaderProps) {
             >
               Tags
             </a>
+            <ThemeToggle />
           </motion.div>
 
-          {/* Right group: theme toggle + mobile search icon + hamburger */}
+          {/* Mobile-only right group: theme toggle + search icon + hamburger */}
           <motion.div
             animate={{ opacity: isSearchActive ? 0 : 1 }}
             transition={FADE}
             style={{ pointerEvents: isSearchActive ? "none" : "auto" }}
-            className="ml-auto flex shrink-0 items-center gap-1 md:ml-0"
+            className="ml-auto flex shrink-0 items-center gap-1 md:hidden"
           >
             <ThemeToggle />
 
@@ -220,6 +222,14 @@ export function Header({ posts, currentPath }: HeaderProps) {
               </motion.span>
             </button>
           </motion.div>
+
+          {/* Search overlay — always in DOM so it works on mobile too */}
+          <SearchBar
+            isActive={isSearchActive}
+            query={query}
+            onChange={setQuery}
+            onClose={handleClose}
+          />
         </nav>
 
         {/* Search results panel */}
