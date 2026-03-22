@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import TableOfContents from "@/components/TableOfContents.astro";
 import { ReadingProgress } from "@/components/ReadingProgress";
 import { ShareButton } from "@/components/ShareButton";
-import { GiscusComments } from "@/components/GiscusComments";
 
 interface Heading {
   depth: number;
@@ -222,16 +221,6 @@ const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
           </div>
         )
       }
-
-      <!-- Giscus comments -->
-      <div>
-        <p
-          class="text-muted-foreground mb-4 text-xs font-semibold tracking-wider uppercase"
-        >
-          Comments
-        </p>
-        <GiscusComments client:only="react" />
-      </div>
     </footer>
   </article>
 </BaseLayout>
