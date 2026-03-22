@@ -22,6 +22,7 @@ interface Props {
   series?: string;
   seriesOrder?: number;
   headings?: Heading[];
+  image?: string;
 }
 
 const {
@@ -32,6 +33,7 @@ const {
   minutesRead,
   series,
   headings = [],
+  image,
 } = Astro.props;
 
 const formattedDate = pubDate.toLocaleDateString("en-US", {
@@ -40,8 +42,12 @@ const formattedDate = pubDate.toLocaleDateString("en-US", {
   day: "numeric",
 });
 
-// Extract slug from URL for prev/next, related, and edit link
+// Extract slug from URL for prev/next, related, and OG image
 const slug = Astro.url.pathname.split("/").filter(Boolean).pop() ?? "";
+
+const ogImageUrl = image
+  ? new URL(image, Astro.site).toString()
+  : new URL(`/og/${slug}.png`, Astro.site).toString();
 
 const allPosts = await getCollection("blog", (p) => !p.data.draft);
 const sorted = allPosts.sort(
@@ -68,7 +74,12 @@ const seriesPosts = series
 const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
 ---
 
-<BaseLayout title={title} description={description}>
+<BaseLayout
+  title={title}
+  description={description}
+  ogImage={ogImageUrl}
+  articleMeta={{ pubDate, tags }}
+>
   <ReadingProgress client:load />
 
   <script>
