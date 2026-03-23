@@ -1,8 +1,8 @@
 ---
 title: "Everything This Blog Can Do"
-description: "A showcase of all the components, syntax features, and integrations available in RayBlog — from code blocks to diagrams to embeds."
-pubDate: 2026-03-22
-tags: ["astro", "meta"]
+description: "A deep-dive reference for every feature, component, and integration available when writing posts — from frontmatter to diagrams to embeds."
+pubDate: 2026-03-23
+tags: ["meta", "astro", "writing"]
 ---
 
 import Callout from "@/components/Callout.astro";
@@ -10,35 +10,55 @@ import { Mermaid } from "@/components/Mermaid";
 import YouTube from "@/components/YouTube.astro";
 import GitHubCard from "@/components/GitHubCard.astro";
 
-This post is a living reference for everything you can drop into an MDX post on this blog. Bookmark it, fork it, delete it — it's here so you have a working example of every feature in one place.
+This post is a living reference for everything you can put inside an MDX post on this blog. Every feature is demonstrated with working examples and the source that produced them, so you can copy-paste rather than guess.
 
 ---
 
-## Callout Boxes
+## Frontmatter
 
-Use `<Callout>` with `type="note|tip|warning|danger"` and an optional `title` prop.
+Every post starts with a YAML frontmatter block. Here are all supported fields:
 
-<Callout type="note" title="A note">
-  Use this for supplementary context that doesn't interrupt the main flow.
-</Callout>
+```yaml title="post.mdx (frontmatter)"
+---
+title: "My Post Title" # required — shown in card, header, OG image
+description: "Short summary" # optional — shown in card and meta description
+pubDate: 2026-03-23 # required — ISO date, used for sorting
+updatedDate: 2026-04-01 # optional — shown as "Updated on …" in header
+tags: ["astro", "typescript"] # optional — from the predefined list below
+draft: true # optional (default: false) — hidden in production
+image: "/og/custom.png" # optional — overrides auto-generated OG image
+series: "Building RayBlog" # optional — links posts into a named series
+seriesOrder: 1 # optional — position within the series (integer)
+---
+```
 
-<Callout type="tip" title="Pro tip">
-  Tips highlight best practices or shortcuts worth knowing.
-</Callout>
+**Available tags:** `meta` · `intro` · `astro` · `react` · `typescript` · `tooling` · `open-source` · `writing`
 
-<Callout type="warning" title="Heads up">
-  Warnings flag things that could cause confusion or subtle bugs.
-</Callout>
-
-<Callout type="danger" title="Danger zone">
-  Use this for destructive, irreversible, or security-critical actions.
+<Callout type="note" title="Drafts">
+  Posts with `draft: true` are excluded from the production build but visible
+  during `bun run dev`. Use this to work on a post without publishing it.
 </Callout>
 
 ---
 
 ## Code Blocks
 
-Powered by [Expressive Code](https://expressive-code.com) with Catppuccin themes, line numbers, and titles.
+Powered by [Expressive Code](https://expressive-code.com) with Catppuccin themes (Mocha dark / Latte light), line numbers, and titles.
+
+### Basic block with title and syntax highlighting
+
+````md
+```ts title="src/lib/utils.ts"
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+```
+````
+
+Renders as:
 
 ```ts title="src/lib/utils.ts"
 import { clsx, type ClassValue } from "clsx";
@@ -49,43 +69,190 @@ export function cn(...inputs: ClassValue[]) {
 }
 ```
 
-### Diff highlighting
+### Line highlighting
 
-Mark added/removed lines with `ins` and `del` annotations:
+Use `{N}` for a single line or `{N-M}` for a range:
 
-```ts title="example.ts" del={2} ins={3-4}
+````md
+```ts {1} {4-6}
+const a = 1;
+const b = 2;
+const c = 3;
+if (a + b === c) {
+  console.log("math works");
+}
+```
+````
+
+```ts {1} {4-6}
+const a = 1;
+const b = 2;
+const c = 3;
+if (a + b === c) {
+  console.log("math works");
+}
+```
+
+### Diff view
+
+Use `del={N}` and `ins={N}` (or ranges) to mark removed and added lines:
+
+````md
+```ts title="refactor.ts" del={2} ins={3-5}
 function greet(name: string) {
   return `Hello, ${name}`;
-  const greeting = `Hello, ${name}!`;
+  const parts = [`Hello`, name].join(", ");
+  const greeting = `${parts}!`;
+  return greeting;
+}
+```
+````
+
+```ts title="refactor.ts" del={2} ins={3-5}
+function greet(name: string) {
+  return `Hello, ${name}`;
+  const parts = [`Hello`, name].join(", ");
+  const greeting = `${parts}!`;
   return greeting;
 }
 ```
 
+### Multiple language examples
+
+Any language Shiki supports works — Python, Rust, SQL, Bash, JSON, YAML…
+
+```python title="fibonacci.py"
+def fib(n: int) -> int:
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+
+print([fib(i) for i in range(10)])
+# [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+```
+
+```sql title="query.sql"
+SELECT
+  p.title,
+  COUNT(c.id) AS comment_count
+FROM posts p
+LEFT JOIN comments c ON c.post_id = p.id
+WHERE p.published_at IS NOT NULL
+GROUP BY p.id
+ORDER BY comment_count DESC
+LIMIT 10;
+```
+
+```bash title="deploy.sh"
+#!/usr/bin/env bash
+set -euo pipefail
+
+bun run build
+bun run preview &
+sleep 2
+curl -sf http://localhost:4321 > /dev/null && echo "Build OK"
+```
+
+### Inline code
+
+Use backticks for `inline code` in prose. Longer paths like `src/components/Header.tsx` render the same way.
+
 ---
 
-## Math / LaTeX
+## Math & LaTeX
 
-Inline math: $E = mc^2$, rendered via KaTeX.
+Math is parsed by [remark-math](https://github.com/remarkjs/remark-math) and rendered to HTML at build time by [KaTeX](https://katex.org) — no JavaScript shipped to the browser.
 
-Display math:
+### Inline math
+
+Wrap with single `$...$`:
+
+The energy–mass equivalence $E = mc^2$ and the quadratic formula $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$ both render inline.
+
+### Display math
+
+Wrap with `$$...$$` on its own lines:
+
+Euler's identity:
 
 $$
-\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+e^{i\pi} + 1 = 0
+$$
+
+The Gaussian integral:
+
+$$
+\int_{-\infty}^{\infty} e^{-x^2}\, dx = \sqrt{\pi}
+$$
+
+Bayes' theorem:
+
+$$
+P(A \mid B) = \frac{P(B \mid A)\, P(A)}{P(B)}
 $$
 
 ---
 
-## Footnotes
+## Callout Boxes
 
-GFM footnotes work out of the box.[^1] You can have multiple.[^2]
+Import and use `<Callout>` with `type="note|tip|warning|danger"`. The `title` prop is optional.
 
-[^1]: This is the first footnote. It can contain **formatted text** too.
+```mdx
+import Callout from "@/components/Callout.astro";
 
-[^2]: Footnotes are rendered at the bottom of the post automatically.
+<Callout type="note">
+  Supplementary context that doesn't block the flow.
+</Callout>
+<Callout type="tip" title="Custom title">
+  Best practices and shortcuts.
+</Callout>
+<Callout type="warning">Things that could cause subtle bugs.</Callout>
+<Callout type="danger" title="Irreversible">
+  Destructive or security-critical actions.
+</Callout>
+```
+
+<Callout type="note">
+  Supplementary context that doesn't interrupt the main flow. Good for asides,
+  definitions, or things a reader might want to know but can skip.
+</Callout>
+
+<Callout type="tip" title="Custom title">
+  Tips highlight best practices, shortcuts, or non-obvious things worth knowing.
+</Callout>
+
+<Callout type="warning">
+  Warnings flag things that could cause confusion, subtle bugs, or unexpected
+  behavior if overlooked.
+</Callout>
+
+<Callout type="danger" title="Irreversible action">
+  Use this for destructive, irreversible, or security-critical operations — data
+  loss, force-pushing, dropping databases, and so on.
+</Callout>
 
 ---
 
-## Diagrams with Mermaid
+## Mermaid Diagrams
+
+Import `<Mermaid>` and pass a diagram as the `code` prop. Diagrams re-render on theme toggle and respect dark/light mode automatically.
+
+```mdx
+import { Mermaid } from "@/components/Mermaid";
+
+<Mermaid
+  code={`
+flowchart LR
+    A[Write MDX] --> B{Has diagrams?}
+    B -- Yes --> C[Add Mermaid block]
+    B -- No --> D[Ship it]
+    C --> D
+`}
+/>
+```
+
+### Flowchart
 
 <Mermaid
   code={`
@@ -97,9 +264,72 @@ flowchart LR
 `}
 />
 
+### Sequence diagram
+
+<Mermaid
+  code={`
+sequenceDiagram
+    participant Browser
+    participant Astro
+    participant DB
+
+    Browser->>Astro: GET /blog/my-post
+    Astro->>DB: query post by slug
+    DB-->>Astro: post data
+    Astro-->>Browser: HTML (SSG, pre-rendered)
+    Note over Browser,Astro: All heavy lifting done at build time
+
+`}
+/>
+
+### State diagram
+
+<Mermaid
+  code={`
+stateDiagram-v2
+    [*] --> Draft
+    Draft --> Review : submit
+    Review --> Draft : request changes
+    Review --> Published : approve
+    Published --> Archived : deprecate
+    Archived --> [*]
+`}
+/>
+
+### Entity-relationship diagram
+
+<Mermaid
+  code={`
+erDiagram
+    POST {
+        string id PK
+        string title
+        date pubDate
+        boolean draft
+    }
+    TAG {
+        string name PK
+    }
+    POST_TAG {
+        string postId FK
+        string tagName FK
+    }
+    POST ||--o{ POST_TAG : "has"
+    TAG ||--o{ POST_TAG : "applied to"
+`}
+/>
+
 ---
 
 ## GitHub Repository Card
+
+Fetches repository metadata from the GitHub API **at build time** — zero runtime requests. Pass `repo` as `"owner/name"`.
+
+```mdx
+import GitHubCard from "@/components/GitHubCard.astro";
+
+<GitHubCard repo="withastro/astro" />
+```
 
 <GitHubCard repo="withastro/astro" />
 
@@ -107,60 +337,189 @@ flowchart LR
 
 ## YouTube Embed
 
-A responsive, privacy-friendly embed (uses `youtube-nocookie.com`):
+Privacy-respecting embed using `youtube-nocookie.com`. Lazy-loaded, responsive 16:9.
 
-<YouTube id="dQw4w9WgXcQ" title="Never Gonna Give You Up" />
+```mdx
+import YouTube from "@/components/YouTube.astro";
 
----
+<YouTube id="dQw4w9WgXcQ" title="Never Gonna Give You Up — Rick Astley" />
+```
 
-## Table of Contents
-
-This post has enough `##` headings to trigger the TOC automatically (needs ≥ 3 h2/h3 headings). You should see it in the sidebar on wider screens.
+<YouTube id="dQw4w9WgXcQ" title="Never Gonna Give You Up — Rick Astley" />
 
 ---
 
 ## Prose Formatting
 
-Standard Markdown all works as expected.
+### Text styles
 
-- **Bold**, _italic_, `inline code`, ~~strikethrough~~
-- [External links](https://astro.build) open normally
-- Ordered and unordered lists
-- Block quotes:
+**Bold**, _italic_, ~~strikethrough~~, and `inline code` all work out of the box.
 
-> "The best documentation is working code."
+You can combine them: **_bold italic_**, **`bold code`**.
+
+### Lists
+
+Unordered:
+
+- First item
+- Second item
+  - Nested item
+  - Another nested item
+    - Deeply nested
+- Third item
+
+Ordered:
+
+1. Clone the repository
+2. Install dependencies with `bun install`
+3. Run `bun run dev`
+   1. The dev server starts at `http://localhost:4321`
+   2. Changes hot-reload automatically
+4. Open your browser
+
+### Blockquotes
+
+> "Programs must be written for people to read, and only incidentally for machines to execute."
+>
+> — Harold Abelson, _Structure and Interpretation of Computer Programs_
+
+Nested blockquote:
+
+> Outer quote.
+>
+> > Inner quote — useful for showing email-style replies.
 
 ### Tables
 
-| Feature     | Status | Notes                  |
-| ----------- | ------ | ---------------------- |
-| Code blocks | ✅     | Expressive Code        |
-| Math        | ✅     | KaTeX                  |
-| Diagrams    | ✅     | Mermaid                |
-| Footnotes   | ✅     | GFM built-in           |
-| Embeds      | ✅     | YouTube, Tweet, GitHub |
+Align columns with `:` in the separator row:
+
+| Feature        | Status | Notes                        |
+| -------------- | :----: | ---------------------------- |
+| Code blocks    |   ✅   | Expressive Code + Catppuccin |
+| Math           |   ✅   | KaTeX, build-time            |
+| Diagrams       |   ✅   | Mermaid, theme-aware         |
+| Callouts       |   ✅   | 4 types                      |
+| GitHub cards   |   ✅   | Build-time fetch             |
+| YouTube embeds |   ✅   | Privacy-friendly             |
+| Footnotes      |   ✅   | GFM built-in                 |
+| Image zoom     |   ✅   | medium-zoom                  |
+| Series nav     |   ✅   | Frontmatter-driven           |
+
+### Keyboard shortcuts
+
+Use `<kbd>` to render key labels: press <kbd>Ctrl</kbd>+<kbd>K</kbd> to open search, <kbd>Esc</kbd> to close.
+
+```html
+press <kbd>Ctrl</kbd>+<kbd>K</kbd> to open search
+```
+
+### Horizontal rules
+
+Three dashes `---` on their own line produce a horizontal rule:
 
 ---
 
-## Back to Top
+### Links
 
-Scroll back up and you should see the ↑ button appear in the bottom-right corner after scrolling past ~400px. Click it to smoothly return to the top.
+[External links](https://astro.build) open in the same tab by default. You can add `{target="_blank"}` in MDX for new-tab behavior.
 
 ---
 
-## Series Support
+## Footnotes
 
-Posts can be grouped into a series using the `series` and `seriesOrder` frontmatter fields:
+GFM footnotes work out of the box.[^1] You can have multiple.[^2] The reference list is rendered automatically at the bottom of the post.
+
+```md
+GFM footnotes work out of the box.[^1]
+
+[^1]: This is the footnote body. It can contain **formatted text** and `code`.
+```
+
+[^1]: This is the first footnote. It can contain **formatted text**, `inline code`, and even links like [astro.build](https://astro.build).
+
+[^2]: Footnotes are numbered automatically and rendered at the bottom of the post. You can reference a footnote multiple times if needed.
+
+---
+
+## Images & Zoom
+
+Standard Markdown image syntax works:
+
+```md
+![Alt text describing the image](https://placehold.co/800x400/6366f1/ffffff?text=Example+Image)
+```
+
+![Example placeholder image](https://placehold.co/800x400/6366f1/ffffff?text=Example+Image)
+
+Clicking any prose image zooms it in via [medium-zoom](https://github.com/francoischalifour/medium-zoom). To opt a specific image out of zoom, add the `.no-zoom` class:
+
+```md
+![No zoom](https://placehold.co/400x200?text=No+zoom){class="no-zoom"}
+```
+
+---
+
+## Series Navigation
+
+Group related posts into a named series using two frontmatter fields:
 
 ```yaml
 series: "Building RayBlog"
 seriesOrder: 1
 ```
 
-A numbered navigation block appears at the top of the post, linking all parts together.
+When a series is defined, the layout automatically renders a numbered nav block at the top of the post, linking all parts together in order. The current post is highlighted; others are links.
+
+<Callout type="tip">
+  Series are discovered at build time — add the same `series` string to any
+  posts you want grouped. Order is determined by `seriesOrder` (integer).
+</Callout>
 
 ---
 
-## Feeds
+## Auto-Generated Layout Features
 
-This blog publishes both an [RSS feed](/rss.xml) and a [JSON Feed](/feed.json) — subscribe in any feed reader.
+The blog layout adds the following automatically — no extra frontmatter needed:
+
+### Reading time
+
+Estimated word count is computed by a custom remark plugin and displayed in the post header alongside the publication date.
+
+### Table of Contents
+
+A sticky sidebar TOC is generated from all `##` (H2) and `###` (H3) headings in the post, but only when the post has **3 or more** headings. This post has many, so you should see it on wider screens.
+
+### Related posts
+
+At the bottom of every post, up to 3 posts sharing at least one tag are surfaced as "Related". Tags in the frontmatter drive this — the more specific your tags, the better the suggestions.
+
+### Previous / Next navigation
+
+Chronologically adjacent posts (by `pubDate`) are linked at the bottom of each post.
+
+### Reading progress bar
+
+A thin bar at the very top of the viewport fills as you scroll through the post.
+
+### Back-to-top button
+
+A `↑` button appears in the bottom-right corner once you've scrolled past ~400 px. Click to return to the top with a smooth animation.
+
+### OG image
+
+Every post gets an auto-generated Open Graph image (used when sharing on social media) based on the post title and slug. Override it with a custom image path in frontmatter:
+
+```yaml
+image: "/og/my-custom-image.png"
+```
+
+---
+
+## RSS & JSON Feeds
+
+The blog publishes two machine-readable feeds:
+
+- **RSS**: [`/rss.xml`](/rss.xml) — compatible with all feed readers
+- **JSON Feed**: [`/feed.json`](/feed.json) — modern alternative format
+
+Both include the full post list (non-draft), sorted by date.
