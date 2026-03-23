@@ -19,6 +19,9 @@ const CONNECT_DIST = 1.5;
 const SPEED = 0.0022;
 const ATTRACT_RADIUS = 2.2;
 const ATTRACT_STRENGTH = 0.005;
+const CAM_PARALLAX = 0.6;
+const CAM_LERP = 0.03;
+const SCROLL_PARALLAX = 0.0008; // world units per scroll pixel
 const COLOR = "#6366f1";
 
 function ParticleNetwork() {
@@ -27,6 +30,7 @@ function ParticleNetwork() {
   // Mouse state — populated by window listeners so pointer-events CSS never blocks it
   const mouseRef = useRef<MouseVec>({ x: 0, y: 0 });
   const hasMouse = useRef(false);
+  const scrollY = useRef(0);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -39,11 +43,16 @@ function ParticleNetwork() {
     const onLeave = () => {
       hasMouse.current = false;
     };
+    const onScroll = () => {
+      scrollY.current = window.scrollY;
+    };
     window.addEventListener("mousemove", onMove);
     document.addEventListener("mouseleave", onLeave);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener("scroll", onScroll);
     };
   }, []);
 
@@ -169,6 +178,16 @@ function ParticleNetwork() {
         }
       }
     }
+
+    // Parallax: camera drifts toward mouse, producing genuine depth parallax
+    // because particles at different Z shift by different amounts in the viewport
+    const targetX = hasMouse.current ? mouseRef.current.x * CAM_PARALLAX : 0;
+    const scrollOffset = scrollY.current * SCROLL_PARALLAX;
+    const targetY =
+      (hasMouse.current ? mouseRef.current.y * CAM_PARALLAX : 0) - scrollOffset;
+    camera.position.x += (targetX - camera.position.x) * CAM_LERP;
+    camera.position.y += (targetY - camera.position.y) * CAM_LERP;
+    camera.lookAt(0, 0, 0);
 
     (pointsGeo.attributes.position as BufferAttribute).needsUpdate = true;
     (linesGeo.attributes.position as BufferAttribute).needsUpdate = true;
