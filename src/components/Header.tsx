@@ -251,46 +251,51 @@ export function Header({ posts, currentPath }: HeaderProps) {
                   No results for &ldquo;{query}&rdquo;
                 </p>
               ) : (
-                <ul>
-                  {results.slice(0, 6).map((post, i) => (
-                    <motion.li
-                      key={post.id}
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.03, duration: 0.15 }}
-                    >
-                      <a
-                        href={`/blog/${post.id}`}
-                        onClick={handleClose}
-                        className="hover:bg-muted/60 group flex flex-col gap-1 px-4 py-3 transition-colors"
+                <>
+                  <ul className="max-h-72 overflow-y-auto">
+                    {results.map((post, i) => (
+                      <motion.li
+                        key={post.id}
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03, duration: 0.15 }}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="group-hover:text-primary line-clamp-1 text-sm font-semibold transition-colors">
-                            {post.title}
-                          </span>
-                          {post.tags.length > 0 && (
-                            <div className="flex shrink-0 gap-1">
-                              {post.tags.slice(0, 2).map((tag) => (
-                                <Badge
-                                  key={tag}
-                                  variant="secondary"
-                                  className="text-xs"
-                                >
-                                  #{tag}
-                                </Badge>
-                              ))}
-                            </div>
+                        <a
+                          href={`/blog/${post.id}`}
+                          onClick={handleClose}
+                          className="hover:bg-muted/60 group flex flex-col gap-1 px-4 py-3 transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="group-hover:text-primary line-clamp-1 text-sm font-semibold transition-colors">
+                              {post.title}
+                            </span>
+                            {post.tags.length > 0 && (
+                              <div className="flex shrink-0 gap-1">
+                                {post.tags.slice(0, 2).map((tag) => (
+                                  <Badge
+                                    key={tag}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    #{tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          {post.description && (
+                            <p className="text-muted-foreground line-clamp-1 text-xs">
+                              {post.description}
+                            </p>
                           )}
-                        </div>
-                        {post.description && (
-                          <p className="text-muted-foreground line-clamp-1 text-xs">
-                            {post.description}
-                          </p>
-                        )}
-                      </a>
-                    </motion.li>
-                  ))}
-                </ul>
+                        </a>
+                      </motion.li>
+                    ))}
+                  </ul>
+                  <p className="text-muted-foreground border-border/50 border-t px-4 py-2 text-center font-mono text-xs">
+                    {results.length} result{results.length !== 1 ? "s" : ""}
+                  </p>
+                </>
               )}
             </motion.div>
           )}
