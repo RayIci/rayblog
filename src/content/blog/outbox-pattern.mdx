@@ -7,7 +7,7 @@ image: "/images/outbox-pattern.svg"
 ---
 
 import Callout from "@/components/Callout.astro";
-import { Mermaid } from "@/components/Mermaid";
+import MermaidDiagram from "@/components/MermaidDiagram.astro";
 
 Distributed systems introduce a class of problems that simply don't exist in monolithic applications. One of the most insidious is the **dual-write problem**: how do you atomically write to your database _and_ publish a message to a broker without risking inconsistency?
 
@@ -56,7 +56,7 @@ The core insight: **treat your message broker as an eventual concern, not an imm
 
 Instead of publishing directly to the broker, you write the message into an `outbox_messages` table _in the same database transaction_ as your domain changes. A separate background process (the **publisher**) reads unpublished messages and forwards them to the broker, then marks them as sent.
 
-<Mermaid
+<MermaidDiagram
   code={`
 sequenceDiagram
     participant App as Application
@@ -393,7 +393,7 @@ builder.Services.AddMassTransit(x =>
 
 The Outbox Pattern guarantees **at-least-once delivery** — under a crash-between-publish-and-mark-sent scenario, the same message may be published twice. Consumers must handle duplicates.
 
-<Mermaid
+<MermaidDiagram
   code={`
 stateDiagram-v2
     [*] --> Received : message arrives
@@ -530,7 +530,7 @@ var pending = await db.OutboxMessages
 
 Polling works well but introduces latency proportional to the polling interval. For low-latency requirements, **transaction log tailing** (CDC — Change Data Capture) is the alternative:
 
-<Mermaid
+<MermaidDiagram
   code={`
 flowchart LR
     A[Application] -->|INSERT outbox row| B[(Database WAL / Redo Log)]
@@ -556,7 +556,7 @@ For most services, polling at 1–5 second intervals is entirely acceptable. Rea
 
 ## Architecture Summary
 
-<Mermaid
+<MermaidDiagram
   code={`
 flowchart TD
     Client -->|PlaceOrder| Service
