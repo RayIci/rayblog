@@ -116,10 +116,10 @@ export function Header({ posts, currentPath }: HeaderProps) {
         <nav
           className={cn(
             "relative flex h-12 items-center gap-2 rounded-xl border px-4",
-            "backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300",
+            "transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300",
             frosted
-              ? "bg-background/80 border-foreground/10 shadow-sm"
-              : "border-transparent bg-transparent shadow-none",
+              ? "bg-background/80 border-foreground/10 shadow-sm backdrop-blur-md"
+              : "border-transparent bg-transparent shadow-none backdrop-blur-none",
           )}
         >
           {/* Logo */}
