@@ -32,7 +32,7 @@ function TorusKnot({ mouseRef }: { mouseRef: React.RefObject<MouseRef> }) {
 
   return (
     <mesh ref={meshRef}>
-      <torusKnotGeometry args={[1.1, 0.32, 200, 20]} />
+      <torusKnotGeometry args={[1.1, 0.32, 64, 6]} />
       <meshBasicMaterial color="#6366f1" wireframe />
     </mesh>
   );
