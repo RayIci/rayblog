@@ -2,6 +2,7 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import PostCard from "@/components/PostCard.astro";
 import { HeroSection } from "@/components/HeroSection";
+import { HeroScene } from "@/components/HeroScene";
 import { getCollection } from "astro:content";
 import { TAGS } from "@/lib/tags";
 
@@ -24,6 +25,11 @@ const activeTags = TAGS.filter((tag) => tagCounts[tag] > 0);
 ---
 
 <BaseLayout title="Home">
+  <!-- Full-page particle background, fixed so it covers the whole page while scrolling -->
+  <div class="pointer-events-none fixed inset-0 -z-10">
+    <HeroScene client:load />
+  </div>
+
   <!-- Hero -->
   <HeroSection client:load />
 
