@@ -202,6 +202,12 @@
   animation: fadeInUp 0.45s ease both;
 }
 
+/* Vertical spacing for Expressive Code blocks inside prose */
+.prose .expressive-code {
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
 @media print {
   header,
   footer,
