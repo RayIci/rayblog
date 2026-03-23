@@ -4,7 +4,9 @@ import { Header } from "@/components/Header";
 import { getCollection } from "astro:content";
 import { ClientRouter } from "astro:transitions";
 
-const allPosts = await getCollection("blog", (p) => !p.data.draft);
+const allPosts = await getCollection("blog", (p) =>
+  import.meta.env.PROD ? !p.data.draft : true,
+);
 const postsData = allPosts.map((p) => ({
   id: p.id,
   title: p.data.title,

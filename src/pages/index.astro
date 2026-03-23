@@ -6,7 +6,9 @@ import { HeroScene } from "@/components/HeroScene";
 import { getCollection } from "astro:content";
 import { TAGS } from "@/lib/tags";
 
-const allPosts = await getCollection("blog", ({ data }) => !data.draft);
+const allPosts = await getCollection("blog", ({ data }) =>
+  import.meta.env.PROD ? !data.draft : true,
+);
 const posts = allPosts
   .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
   .slice(0, 3);

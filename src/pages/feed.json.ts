@@ -2,7 +2,9 @@ import { getCollection } from "astro:content";
 import type { APIContext } from "astro";
 
 export async function GET(context: APIContext) {
-  const posts = await getCollection("blog", ({ data }) => !data.draft);
+  const posts = await getCollection("blog", ({ data }) =>
+    import.meta.env.PROD ? !data.draft : true,
+  );
   const sorted = posts.sort(
     (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf(),
   );

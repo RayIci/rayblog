@@ -3,7 +3,9 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import { getCollection } from "astro:content";
 import { TAGS } from "@/lib/tags";
 
-const posts = await getCollection("blog", ({ data }) => !data.draft);
+const posts = await getCollection("blog", ({ data }) =>
+  import.meta.env.PROD ? !data.draft : true,
+);
 
 const tagCounts = TAGS.map((tag) => ({
   tag,

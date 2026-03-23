@@ -49,7 +49,9 @@ const ogImageUrl = image
   ? new URL(image, Astro.site).toString()
   : new URL(`/og/${slug}.png`, Astro.site).toString();
 
-const allPosts = await getCollection("blog", (p) => !p.data.draft);
+const allPosts = await getCollection("blog", (p) =>
+  import.meta.env.PROD ? !p.data.draft : true,
+);
 const sorted = allPosts.sort(
   (a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime(),
 );

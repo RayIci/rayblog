@@ -5,7 +5,9 @@ import { getCollection } from "astro:content";
 import { TAGS, type Tag } from "@/lib/tags";
 
 export async function getStaticPaths() {
-  const posts = await getCollection("blog", ({ data }) => !data.draft);
+  const posts = await getCollection("blog", ({ data }) =>
+    import.meta.env.PROD ? !data.draft : true,
+  );
   return TAGS.map((tag) => ({
     params: { tag },
     props: { posts: posts.filter((p) => p.data.tags.includes(tag)) },

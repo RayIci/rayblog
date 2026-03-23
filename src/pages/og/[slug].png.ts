@@ -9,7 +9,9 @@ const interRegular = readFileSync(resolve("src/fonts/inter-400.ttf"));
 const interBold = readFileSync(resolve("src/fonts/inter-700.ttf"));
 
 export const getStaticPaths: GetStaticPaths = async () => {
-  const posts = await getCollection("blog", ({ data }) => !data.draft);
+  const posts = await getCollection("blog", ({ data }) =>
+    import.meta.env.PROD ? !data.draft : true,
+  );
   return posts.map((post) => ({
     params: { slug: post.id },
     props: { title: post.data.title, tags: post.data.tags ?? [] },
