@@ -1,6 +1,6 @@
 ---
 title: "The Outbox Pattern: Reliable Messaging in Distributed Systems"
-description: "A deep dive into the Outbox Pattern — how it solves the dual-write problem, how to implement it in C# with EF Core, and how to build a robust polling publisher."
+description: "A deep dive into the Outbox Pattern — how it solves the dual-write problem, with a full C# implementation following DDD, Clean Architecture, and SOLID principles."
 pubDate: 2026-03-23
 tags: ["architecture", "backend", "dotnet", "pattern"]
 image: "/images/outbox-pattern.svg"
@@ -9,52 +9,53 @@ image: "/images/outbox-pattern.svg"
 import Callout from "@/components/Callout.astro";
 import MermaidDiagram from "@/components/MermaidDiagram.astro";
 
-Distributed systems introduce a class of problems that simply don't exist in monolithic applications. One of the most insidious is the **dual-write problem**: how do you atomically write to your database _and_ publish a message to a broker without risking inconsistency?
+Distributed systems introduce a class of problems that simply do not exist in monolithic applications. One of the most insidious is the **dual-write problem**: how do you atomically write to your database _and_ publish a message to a broker without risking inconsistency?
 
-The Outbox Pattern is the standard, battle-tested answer. This post covers the problem from first principles, then builds a full implementation in C# with Entity Framework Core.
+The Outbox Pattern is the standard, battle-tested answer. This post is split into two parts. [Part 1](#part-1--understanding-the-outbox-pattern) explains the pattern, its guarantees, and the surrounding theory — with minimal code. [Part 2](#part-2--full-implementation) builds a complete C# implementation following Clean Architecture, DDD, and SOLID, with explicit references back to the theory.
+
+---
+
+# Part 1 — Understanding the Outbox Pattern
 
 ---
 
 ## The Problem: Dual Writes
 
-Suppose you have an order service. When a new order is placed, you need to:
+Suppose you have an order service. When a customer places an order, two things need to happen:
 
-1. Persist the `Order` entity to the database
-2. Publish an `OrderPlaced` event to a message broker (Kafka, RabbitMQ, etc.)
+1. Persist the `Order` to the database
+2. Publish an `OrderPlaced` event so downstream services react
 
-A naive implementation does these two operations sequentially:
+A naive implementation does both sequentially:
 
-```csharp title="OrderService.cs (naive, broken)"
-public async Task PlaceOrderAsync(PlaceOrderCommand command)
-{
-    var order = new Order(command.CustomerId, command.Items);
-    await _dbContext.Orders.AddAsync(order);
-    await _dbContext.SaveChangesAsync();   // ① DB write succeeds
+```csharp title="Naive, broken implementation"
+var order = Order.Place(command.CustomerId, command.Items);
+await _db.SaveChangesAsync();                           // ① DB write
 
-    await _messageBus.PublishAsync(new OrderPlaced(order.Id)); // ② may fail!
-}
+await _bus.PublishAsync(new OrderPlaced(order.Id));     // ② broker publish
 ```
 
-This has two failure modes:
+Two failure windows exist:
 
-- **Crash after ①, before ②** — order is persisted, event is never published. Downstream services never know the order exists.
-- **Crash after ②, before ①** — in the reverse order, the event fires but the order was never saved. Consumers process a ghost.
+- **Crash after ①** — the order is saved, the event is never published. Downstream services never know the order exists.
+- **Crash after ②** — if you reverse the order (publish first), the event fires but the order was never committed. Consumers react to a ghost.
 
-Neither error is detectable without out-of-band reconciliation.
+Neither failure is detectable without manual reconciliation.
 
 <Callout type="danger" title="You cannot make two different systems atomic">
-  There is no two-phase commit across a relational database and a message broker
-  in practice. Any implementation that assumes otherwise will fail under
-  partition or crash. The Outbox Pattern sidesteps this entirely.
+  There is no practical two-phase commit across a relational database and a
+  message broker. Any implementation that assumes otherwise will fail under
+  partition or process crash. The Outbox Pattern sidesteps this by reducing the
+  problem to a single-system commit.
 </Callout>
 
 ---
 
-## The Outbox Pattern
+## The Outbox Concept
 
-The core insight: **treat your message broker as an eventual concern, not an immediate one**.
+The core insight is to **treat the broker as an eventual concern, not an immediate one**.
 
-Instead of publishing directly to the broker, you write the message into an `outbox_messages` table _in the same database transaction_ as your domain changes. A separate background process (the **publisher**) reads unpublished messages and forwards them to the broker, then marks them as sent.
+Instead of publishing to the broker directly, write the message into an `outbox_messages` table in the **same database transaction** as your domain changes. A separate background process — the **publisher** — polls for unsent rows, forwards them to the broker, and marks them sent.
 
 <MermaidDiagram
   code={`
@@ -71,120 +72,571 @@ sequenceDiagram
     Note over App,DB: Single atomic transaction
 
     loop every N seconds
-        Pub->>DB: SELECT * FROM outbox_messages WHERE sent_at IS NULL
+        Pub->>DB: SELECT unsent rows
         DB-->>Pub: pending messages
         Pub->>Broker: publish event
-        Pub->>DB: UPDATE outbox_messages SET sent_at = NOW()
+        Pub->>DB: UPDATE sent_at = NOW()
     end
 
 `}
 />
 
-The atomic write to `orders` and `outbox_messages` is guaranteed by the database's own ACID transaction. The publisher can crash and restart without data loss — unprocessed messages sit in the outbox until they are successfully forwarded.
+The ACID guarantees of the database make this atomic: if the transaction rolls back, both rows roll back together. The publisher can crash and restart freely — unsent rows stay in the outbox until they succeed.
+
+The outbox row carries three things: a **stable unique ID** (assigned at write time), the **event type** (so the publisher knows what it's sending), and the **serialized payload**.
 
 ---
 
-## Data Model
+## At-Least-Once Delivery
 
-### The Outbox Message Entity
+The Outbox Pattern provides **at-least-once delivery**, not exactly-once.
 
-```csharp title="Domain/OutboxMessage.cs"
-public sealed class OutboxMessage
-{
-    public Guid Id { get; private set; }
-    public string Type { get; private set; }         // fully-qualified event type name
-    public string Payload { get; private set; }      // JSON-serialized event
-    public DateTimeOffset CreatedAt { get; private set; }
-    public DateTimeOffset? SentAt { get; private set; }
-    public string? Error { get; private set; }
-    public int RetryCount { get; private set; }
+Consider the publisher's lifecycle: it reads an unsent row, publishes to the broker, then marks the row sent. If the publisher crashes between the publish and the mark-sent, it will restart, find the row still pending, and publish again. The broker receives the event a second time.
 
-    private OutboxMessage() { } // EF Core
+This is not a flaw — it is a deliberate trade-off. The alternative, exactly-once delivery, would require distributed coordination that is expensive and complex to implement correctly. At-least-once is the right default; the consequence is that **consumers must be designed to handle duplicates**.
 
-    public static OutboxMessage From<T>(T @event) where T : notnull
-    {
-        return new OutboxMessage
-        {
-            Id = Guid.NewGuid(),
-            Type = typeof(T).AssemblyQualifiedName!,
-            Payload = JsonSerializer.Serialize(@event),
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
-    }
+---
 
-    public void MarkSent() => SentAt = DateTimeOffset.UtcNow;
+## Domain Events and Bounded Contexts
 
-    public void MarkFailed(string error)
-    {
-        Error = error;
-        RetryCount++;
-    }
-}
+In Domain-Driven Design, a **Domain Event** is an immutable fact — something that happened inside a Bounded Context (BC). When the `Order` aggregate successfully confirms a placement, it raises `OrderPlaced`. This event lives in memory on the aggregate until the infrastructure layer persists it.
+
+When an event needs to cross a BC boundary, it is serialized into the outbox and published to the broker as an **Integration Event** — a stable, versioned contract that other BCs subscribe to. The distinction matters: the domain event may carry rich domain types, whereas the integration event should carry only primitives and DTOs, because it crosses a process boundary and is deserialized in a completely different codebase.
+
+Each downstream BC has its own domain model, its own database, and its own reaction to the event. There is no shared state. This is **eventual consistency** across BCs by design.
+
+This independence is also what makes idempotency the consumer's responsibility: the Order BC has no knowledge of how many times each downstream BC will receive the event, and downstream BCs cannot coordinate with each other. Each BC must protect itself.
+
+---
+
+## Idempotency at the Consumer
+
+### What idempotency means
+
+An **idempotent** operation produces the same result whether applied once or a hundred times. In consumer terms: processing the same event twice must leave the system in the same state as processing it once.
+
+### The e-commerce scenario
+
+Consider a checkout flow across four BCs. A customer places an order — the `Order` aggregate in the **Order BC** raises `OrderPlaced`. Three downstream BCs are subscribed:
+
+- **Inventory BC** — `StockReservation` aggregate: locks the ordered units in stock
+- **Notification BC** — sends a confirmation email to the customer
+- **Billing BC** — `PaymentIntent` aggregate: calls the payment gateway to capture the charge
+
+The publisher sends `OrderPlaced` and crashes before marking the outbox row sent. It restarts and republishes. Every BC receives the event twice.
+
+<MermaidDiagram
+  code={`
+sequenceDiagram
+    participant Outbox as OutboxPublisher (Order BC)
+    participant Broker
+    participant Inventory as Inventory BC
+    participant Notification as Notification BC
+    participant Billing as Billing BC
+
+    Outbox->>Broker: OrderPlaced (MessageId=abc-123) — 1st delivery
+    Broker->>Inventory: deliver
+    Broker->>Notification: deliver
+    Broker->>Billing: deliver
+
+    Note over Outbox: crashes before MarkSent()<br/>restarts, finds row still pending
+
+    Outbox->>Broker: OrderPlaced (MessageId=abc-123) — 2nd delivery ⚠️
+    Broker->>Inventory: deliver ⚠️
+    Broker->>Notification: deliver ⚠️
+    Broker->>Billing: deliver ⚠️
+
+`}
+/>
+
+Without idempotency protection, each BC processes the duplicate as a new event:
+
+| Bounded Context     | Action on duplicate                               | Consequence                                                               |
+| ------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Inventory BC**    | Creates a second `StockReservation` for the order | Stock reserved twice — phantom shortage, apparent oversell                |
+| **Notification BC** | Fires a second SMTP call                          | Customer receives two identical confirmation emails                       |
+| **Billing BC**      | Creates a second `PaymentIntent` and captures it  | Customer charged twice — financial harm, regulatory liability, chargeback |
+
+### Naturally idempotent vs. requires deduplication
+
+Not every operation needs explicit protection. The question is whether running it twice produces a different net effect.
+
+| Operation                                                     | BC              | Idempotent? | Why                                                                   |
+| ------------------------------------------------------------- | --------------- | :---------: | --------------------------------------------------------------------- |
+| `UPDATE orders SET status = 'confirmed' WHERE id = @id`       | Order BC        |     ✅      | SET semantics — writing the same value twice has no additional effect |
+| Creating a `StockReservation` row for the order               | Inventory BC    |     ❌      | INSERT semantics — creates a second row on the second delivery        |
+| Adding reserved units to a stock counter                      | Inventory BC    |     ❌      | ADD semantics — increments accumulate across calls                    |
+| Sending an email via an external SMTP provider                | Notification BC |     ❌      | Each call delivers a new message                                      |
+| `gateway.Capture(amount, idempotencyKey: orderId)` (with key) | Billing BC      |     ✅      | Payment gateways deduplicate on the key — use it                      |
+| `gateway.Capture(amount)` (no key)                            | Billing BC      |     ❌      | Without a key, the gateway treats each call as a new transaction      |
+
+The rule of thumb: **SET semantics are idempotent; ADD / INSERT / CHARGE semantics are not.** Any BC that performs a non-idempotent operation must guard against duplicates explicitly.
+
+### The deduplication guard
+
+The standard mechanism is a `processed_messages` table in each BC's own database. Before executing any domain logic, the consumer attempts to insert the `MessageId`. If the insert succeeds, this is a new message — proceed. If it hits the unique constraint, this is a duplicate — discard.
+
+<MermaidDiagram
+  code={`
+stateDiagram-v2
+    [*] --> Received : message arrives
+    Received --> TryRecord : insert MessageId into processed_messages
+    TryRecord --> Duplicate : row already exists — duplicate
+    TryRecord --> New : row inserted — new message
+    Duplicate --> [*] : ACK broker, no side effects
+    New --> DomainLogic : apply use case
+    DomainLogic --> Commit : dedup insert + domain write, same transaction
+    Commit --> [*] : ACK broker
+`}
+/>
+
+The dedup insert and the domain write **must commit in the same database transaction**. A crash between the two would leave either a dedup row without the associated domain change (the message is then silently lost on retry), or a domain change without a dedup row (safe, but only by accident). Atomic commit is the only guarantee that makes this correct.
+
+### Where does the MessageId come from?
+
+The `MessageId` used for deduplication is the **broker envelope header** — not a field in the `OrderPlaced` payload. It is not sent by the Order Service. It comes from the outbox infrastructure.
+
+When the outbox row is written, a UUID is assigned to it and stored as the row's primary key. When the publisher later reads that row and sends it to the broker, it explicitly stamps that UUID as the `MessageId` envelope header. Every retry of the same outbox row sends the same UUID.
+
+```
+Order.Place() raises OrderPlaced in memory
+  └─▶ Transaction commits: Order row + OutboxMessage { Id = <uuid> } row
+
+OutboxPublisher reads the unsent row
+  └─▶ publishes to broker, stamping MessageId = <uuid> on the envelope
+      └─▶ same uuid on every retry of the same row
+
+Consumer receives the message
+  └─▶ reads context.MessageId == <uuid>
+      └─▶ inserts <uuid> into processed_messages — new or duplicate
 ```
 
-### The Domain Aggregate
+If the publisher called `Publish(payload)` without stamping the ID, most brokers and libraries would generate a fresh UUID per call. A retry would arrive with a different `MessageId`, and the consumer would incorrectly treat it as a new event. The explicit stamp is what makes the deduplication key stable.
 
-Domain events are collected on the aggregate and converted to outbox messages when saving:
+---
 
-```csharp title="Domain/Order.cs"
-public sealed class Order
+## Polling vs. Transaction Log Tailing
+
+The publisher described above uses **polling**: query the outbox on a timer, publish what you find, mark it sent. An alternative is **Change Data Capture (CDC)**: tail the database's write-ahead log and stream row-level changes to the broker in near real-time, without polling.
+
+<MermaidDiagram
+  code={`
+flowchart LR
+    A[Application] -->|INSERT outbox row| B[(Database WAL)]
+    B -->|stream changes| C[Debezium / CDC Agent]
+    C -->|publish| D[Kafka / Broker]
+    D -->|consume| E[Consumers]
+    style B fill:#1e1b2e,stroke:#818cf8
+    style C fill:#1e1b2e,stroke:#fbbf24
+    style D fill:#064e3b,stroke:#34d399
+`}
+/>
+
+| Approach  | Latency      | Complexity | Broker coupling  |
+| --------- | ------------ | ---------- | ---------------- |
+| Polling   | seconds      | low        | none             |
+| CDC / WAL | milliseconds | high       | Kafka + Debezium |
+
+Start with polling. A five-second interval is acceptable for the vast majority of workloads. Reach for CDC only when end-to-end latency is a hard requirement.
+
+---
+
+## Architecture Overview
+
+<MermaidDiagram
+  code={`
+flowchart TD
+    Client -->|PlaceOrderCommand| Handler[Application Handler]
+
+    subgraph OrderBC ["Order BC — single transaction"]
+        direction LR
+        Handler --> Orders[(orders)]
+        Handler --> Outbox[(outbox_messages)]
+    end
+
+    Publisher[OutboxPublisher] -->|polls| Outbox
+    Publisher -->|publishes| Broker[(Message Broker)]
+
+    Broker -->|OrderPlaced| InvBC[Inventory BC]
+    Broker -->|OrderPlaced| NotifBC[Notification BC]
+    Broker -->|OrderPlaced| BillingBC[Billing BC]
+
+    InvBC -->|dedup check| PM1[(processed_messages)]
+    NotifBC -->|dedup check| PM2[(processed_messages)]
+    BillingBC -->|dedup check| PM3[(processed_messages)]
+
+`}
+/>
+
+Three things stand out in this diagram: the outbox write and the domain write share a single transaction inside the Order BC; each downstream BC has its own isolated `processed_messages` table; and the broker is the only coupling between BCs.
+
+---
+
+# Part 2 — Full Implementation
+
+---
+
+The implementation follows Clean Architecture. The **dependency rule** is strict: inner layers never reference outer ones.
+
+- **Domain** — pure business rules, no framework dependencies
+- **Application** — use-case orchestration, depends only on Domain interfaces
+- **Infrastructure** — all I/O: EF Core, MassTransit, background services
+
+Every section below references the concept it implements from [Part 1](#part-1--understanding-the-outbox-pattern).
+
+---
+
+## Project Structure
+
+```
+src/
+├── Domain/
+│   ├── Aggregates/
+│   │   ├── Order.cs
+│   │   └── OrderLine.cs
+│   ├── Events/
+│   │   ├── IDomainEvent.cs
+│   │   └── OrderPlaced.cs
+│   ├── Repositories/
+│   │   └── IOrderRepository.cs       # interface — implemented in Infrastructure
+│   └── IHasDomainEvents.cs
+│
+├── Application/
+│   ├── Commands/
+│   │   ├── PlaceOrderCommand.cs
+│   │   └── PlaceOrderCommandHandler.cs
+│   └── Ports/
+│       └── IUnitOfWork.cs
+│
+└── Infrastructure/
+    ├── Persistence/
+    │   ├── AppDbContext.cs
+    │   ├── OrderRepository.cs
+    │   └── Interceptors/
+    │       └── DomainEventsToOutboxInterceptor.cs
+    ├── Outbox/
+    │   ├── OutboxMessage.cs
+    │   ├── IMessagePublisher.cs
+    │   ├── MassTransitPublisher.cs
+    │   └── OutboxPublisher.cs
+    └── DependencyInjection.cs
+```
+
+---
+
+## Domain Layer
+
+The Domain layer has zero external dependencies. It owns the business rules, the aggregate, and the repository interface. It knows nothing about EF Core, JSON, or messaging.
+
+### IHasDomainEvents
+
+All aggregates that can raise [Domain Events](#domain-events-and-bounded-contexts) implement this interface. The infrastructure interceptor uses it generically — it never needs to know which specific aggregate types exist, so adding a new aggregate requires zero changes to the outbox infrastructure.
+
+```csharp title="Domain/IHasDomainEvents.cs"
+public interface IHasDomainEvents
 {
-    private readonly List<IDomainEvent> _domainEvents = new();
-    public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
-
-    public Guid Id { get; private set; }
-    public Guid CustomerId { get; private set; }
-    public OrderStatus Status { get; private set; }
-    public IReadOnlyList<OrderLine> Lines { get; private set; }
-    public DateTimeOffset PlacedAt { get; private set; }
-
-    private Order() { } // EF Core
-
-    public static Order Place(Guid customerId, IEnumerable<OrderLine> lines)
-    {
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            CustomerId = customerId,
-            Status = OrderStatus.Pending,
-            Lines = lines.ToList(),
-            PlacedAt = DateTimeOffset.UtcNow,
-        };
-
-        order._domainEvents.Add(new OrderPlaced(order.Id, order.CustomerId, order.PlacedAt));
-        return order;
-    }
-
-    public void ClearDomainEvents() => _domainEvents.Clear();
+    IReadOnlyList<IDomainEvent> DomainEvents { get; }
+    void ClearDomainEvents();
 }
 ```
 
 ### Domain Events
 
+```csharp title="Domain/Events/IDomainEvent.cs"
+/// <summary>
+/// Marker interface for domain events.
+/// Events that cross BC boundaries are serialized by the outbox infrastructure
+/// and travel over the broker as integration events.
+/// </summary>
+public interface IDomainEvent { }
+```
+
+`OrderPlaced` carries only primitives and DTOs. This makes it safe to use directly as the integration event payload — no mapping step is needed. When a domain event contains Value Objects or aggregate-internal types, introduce a separate DTO and a mapping step in the Infrastructure layer.
+
 ```csharp title="Domain/Events/OrderPlaced.cs"
 public sealed record OrderPlaced(
     Guid OrderId,
     Guid CustomerId,
+    IReadOnlyList<OrderLineDto> Lines,
     DateTimeOffset PlacedAt) : IDomainEvent;
 
-public interface IDomainEvent { }
+/// <summary>DTO for an order line — safe to embed in integration event payloads.</summary>
+public sealed record OrderLineDto(Guid ProductId, int Quantity, decimal UnitPrice);
+```
+
+### The Order Aggregate
+
+The factory method `Order.Place` is the only entry point for creating a valid order. It enforces invariants, builds the aggregate, and raises the [domain event](#domain-events-and-bounded-contexts) — all before the infrastructure layer is involved.
+
+```csharp title="Domain/Aggregates/Order.cs"
+public sealed class Order : IHasDomainEvents
+{
+    private readonly List<IDomainEvent> _domainEvents = new();
+    public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
+
+    public Guid           Id         { get; private set; }
+    public Guid           CustomerId { get; private set; }
+    public OrderStatus    Status     { get; private set; }
+    public IReadOnlyList<OrderLine> Lines { get; private set; } = [];
+    public DateTimeOffset PlacedAt   { get; private set; }
+
+    private Order() { } // Required by EF Core
+
+    public static Order Place(Guid customerId, IEnumerable<OrderLine> lines)
+    {
+        var lineList = lines.ToList();
+        if (lineList.Count == 0)
+            throw new DomainException("An order must have at least one line.");
+
+        var order = new Order
+        {
+            Id         = Guid.NewGuid(),
+            CustomerId = customerId,
+            Status     = OrderStatus.Pending,
+            Lines      = lineList,
+            PlacedAt   = DateTimeOffset.UtcNow,
+        };
+
+        // Map OrderLine value objects to DTOs before embedding in the event.
+        // The integration event contract must not expose internal domain types.
+        order._domainEvents.Add(new OrderPlaced(
+            order.Id,
+            order.CustomerId,
+            order.Lines.Select(l => new OrderLineDto(l.ProductId, l.Quantity, l.UnitPrice)).ToList(),
+            order.PlacedAt));
+
+        return order;
+    }
+
+    public void ClearDomainEvents() => _domainEvents.Clear();
+}
+
+public enum OrderStatus { Pending, Confirmed, Cancelled }
+```
+
+### OrderLine
+
+`OrderLine` is an owned entity. It has no identity or meaning outside the `Order` aggregate boundary — it behaves as a Value Object. EF Core's `OwnsMany` requires a surrogate key.
+
+```csharp title="Domain/Aggregates/OrderLine.cs"
+public sealed class OrderLine
+{
+    public Guid    Id        { get; private set; }
+    public Guid    ProductId { get; private set; }
+    public int     Quantity  { get; private set; }
+    public decimal UnitPrice { get; private set; }
+
+    private OrderLine() { }
+
+    public static OrderLine Create(Guid productId, int quantity, decimal unitPrice)
+    {
+        if (quantity <= 0)  throw new DomainException("Quantity must be positive.");
+        if (unitPrice < 0)  throw new DomainException("Unit price cannot be negative.");
+        return new OrderLine
+        {
+            Id        = Guid.NewGuid(),
+            ProductId = productId,
+            Quantity  = quantity,
+            UnitPrice = unitPrice,
+        };
+    }
+
+    public decimal Total => Quantity * UnitPrice;
+}
+```
+
+### Repository Interface
+
+The interface lives in Domain — it defines _what_ the application needs, not _how_ it is stored. The EF Core implementation is in [OrderRepository](#orderrepository).
+
+```csharp title="Domain/Repositories/IOrderRepository.cs"
+public interface IOrderRepository
+{
+    void Add(Order order);
+    Task<Order?> FindByIdAsync(Guid id, CancellationToken ct = default);
+}
 ```
 
 ---
 
-## DbContext Configuration
+## Application Layer
 
-```csharp title="Infrastructure/AppDbContext.cs"
-public sealed class AppDbContext : DbContext
+The Application layer orchestrates the `PlaceOrder` use case. It depends only on Domain interfaces — no EF Core, no MassTransit. Every handler is unit-testable with mocks.
+
+### IUnitOfWork
+
+Abstracts the persistence commit and transaction management, fulfilling the [single-transaction requirement](#the-outbox-concept) described in Part 1. `AppDbContext` implements this interface; the Application layer never sees `AppDbContext`.
+
+```csharp title="Application/Ports/IUnitOfWork.cs"
+public interface IUnitOfWork
 {
-    public DbSet<Order> Orders => Set<Order>();
+    Task<int> SaveChangesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Executes <paramref name="action"/> inside a database transaction,
+    /// committing on success and rolling back on any exception.
+    /// Required when raw SQL (e.g. deduplication insert) and EF Core tracked
+    /// changes must commit atomically — see the consumer implementation.
+    /// </summary>
+    Task ExecuteInTransactionAsync(Func<Task> action, CancellationToken ct = default);
+}
+```
+
+### PlaceOrderCommandHandler
+
+The handler creates the aggregate, persists it, and returns. No mention of messaging — the domain event raised inside `Order.Place` is collected by the interceptor automatically when `SaveChangesAsync` is called.
+
+```csharp title="Application/Commands/PlaceOrderCommandHandler.cs"
+public sealed record PlaceOrderCommand(
+    Guid CustomerId,
+    IReadOnlyList<OrderLineDto> Items);
+
+public sealed class PlaceOrderCommandHandler
+{
+    private readonly IOrderRepository _orders;
+    private readonly IUnitOfWork      _unitOfWork;
+
+    public PlaceOrderCommandHandler(IOrderRepository orders, IUnitOfWork unitOfWork)
+    {
+        _orders     = orders;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<Guid> HandleAsync(PlaceOrderCommand command, CancellationToken ct)
+    {
+        var lines = command.Items
+            .Select(i => OrderLine.Create(i.ProductId, i.Quantity, i.UnitPrice))
+            .ToList();
+
+        var order = Order.Place(command.CustomerId, lines);
+        _orders.Add(order);
+
+        // SaveChangesAsync triggers DomainEventsToOutboxInterceptor, which converts
+        // the domain event raised by Order.Place into an OutboxMessage row.
+        // Both the order row and the outbox row commit in the same transaction —
+        // see The Outbox Concept in Part 1.
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return order.Id;
+    }
+}
+```
+
+---
+
+## Infrastructure Layer
+
+The Infrastructure layer owns all I/O. It is the only layer that may reference EF Core, MassTransit, or any external library. It wires Domain interfaces to their concrete implementations.
+
+### OutboxMessage
+
+`OutboxMessage` is an **infrastructure entity** — the Domain and Application layers never reference it. It models the outbox row described in [The Outbox Concept](#the-outbox-concept).
+
+The `Id` assigned here is the stable UUID that becomes the broker `MessageId` header — see [Where does the MessageId come from?](#where-does-the-messageid-come-from).
+
+```csharp title="Infrastructure/Outbox/OutboxMessage.cs"
+public sealed class OutboxMessage
+{
+    public Guid            Id         { get; private set; }
+    public string          Type       { get; private set; } = string.Empty;
+    public string          Payload    { get; private set; } = string.Empty;
+    public DateTimeOffset  CreatedAt  { get; private set; }
+    public DateTimeOffset? SentAt     { get; private set; }
+    public int             RetryCount { get; private set; }
+    public string?         LastError  { get; private set; }
+
+    private OutboxMessage() { }
+
+    // internal: only DomainEventsToOutboxInterceptor may create instances
+    internal static OutboxMessage From(IDomainEvent @event) => new()
+    {
+        Id        = Guid.NewGuid(),
+        Type      = @event.GetType().AssemblyQualifiedName!,
+        Payload   = JsonSerializer.Serialize(@event, @event.GetType()),
+        CreatedAt = DateTimeOffset.UtcNow,
+    };
+
+    public void MarkSent() => SentAt = DateTimeOffset.UtcNow;
+
+    public void MarkFailed(string error)
+    {
+        LastError = error;
+        RetryCount++;
+    }
+}
+```
+
+<Callout type="warning" title="AssemblyQualifiedName is fragile">
+  Renaming or moving the event class will break deserialization of existing
+  outbox rows. In production, use a stable string registry mapping short keys
+  like `"order-placed"` to types, and store only the key.
+</Callout>
+
+### DomainEventsToOutboxInterceptor
+
+This interceptor is the bridge between the Domain and the outbox table. It intercepts every `SaveChangesAsync` call, collects all pending domain events from tracked aggregates via `IHasDomainEvents`, converts them to `OutboxMessage` rows, and adds them to the change tracker before the SQL is sent.
+
+The result: the conversion happens automatically, invisibly to the Application layer, and the domain write and the outbox write are always in the same transaction — which is the [core guarantee of the pattern](#the-outbox-concept).
+
+Because it targets the `IHasDomainEvents` interface, adding a new aggregate with domain events requires no changes here.
+
+```csharp title="Infrastructure/Persistence/Interceptors/DomainEventsToOutboxInterceptor.cs"
+public sealed class DomainEventsToOutboxInterceptor : SaveChangesInterceptor
+{
+    public override InterceptionResult<int> SavingChanges(
+        DbContextEventData eventData, InterceptionResult<int> result)
+    {
+        ConvertDomainEvents(eventData.Context);
+        return base.SavingChanges(eventData, result);
+    }
+
+    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData,
+        InterceptionResult<int> result,
+        CancellationToken ct = default)
+    {
+        ConvertDomainEvents(eventData.Context);
+        return base.SavingChangesAsync(eventData, result, ct);
+    }
+
+    private static void ConvertDomainEvents(DbContext? context)
+    {
+        if (context is null) return;
+
+        var aggregates = context.ChangeTracker
+            .Entries<IHasDomainEvents>()
+            .Select(e => e.Entity)
+            .Where(a => a.DomainEvents.Count > 0)
+            .ToList();
+
+        var messages = aggregates
+            .SelectMany(a => a.DomainEvents)
+            .Select(OutboxMessage.From)
+            .ToList();
+
+        foreach (var aggregate in aggregates)
+            aggregate.ClearDomainEvents();
+
+        context.Set<OutboxMessage>().AddRange(messages);
+    }
+}
+```
+
+### AppDbContext
+
+With the interceptor owning the event-conversion responsibility, `AppDbContext` is pure persistence configuration. It implements `IUnitOfWork` — `SaveChangesAsync` is the commit boundary, and `ExecuteInTransactionAsync` wraps EF Core's own transaction API for cases where [atomic dedup + domain write](#the-deduplication-guard) is required.
+
+```csharp title="Infrastructure/Persistence/AppDbContext.cs"
+public sealed class AppDbContext : DbContext, IUnitOfWork
+{
+    public DbSet<Order>         Orders         => Set<Order>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder mb)
     {
-        modelBuilder.Entity<Order>(b =>
+        mb.Entity<Order>(b =>
         {
             b.HasKey(o => o.Id);
             b.Property(o => o.Status).HasConversion<string>();
@@ -193,97 +645,98 @@ public sealed class AppDbContext : DbContext
                 lines.WithOwner();
                 lines.HasKey(l => l.Id);
             });
-            b.Ignore(o => o.DomainEvents);
+            b.Ignore(o => o.DomainEvents); // not persisted — collected by the interceptor
         });
 
-        modelBuilder.Entity<OutboxMessage>(b =>
+        mb.Entity<OutboxMessage>(b =>
         {
             b.HasKey(m => m.Id);
-            b.HasIndex(m => m.SentAt);       // index for the polling query
+            b.HasIndex(m => m.SentAt);     // the polling query filters on this
             b.HasIndex(m => m.CreatedAt);
-            b.Property(m => m.Payload).HasColumnType("jsonb"); // PostgreSQL
+            b.Property(m => m.Payload).HasColumnType("jsonb");
         });
     }
 
-    public override async Task<int> SaveChangesAsync(CancellationToken ct = default)
+    public async Task ExecuteInTransactionAsync(Func<Task> action, CancellationToken ct)
     {
-        ConvertDomainEventsToOutboxMessages();
-        return await base.SaveChangesAsync(ct);
-    }
-
-    private void ConvertDomainEventsToOutboxMessages()
-    {
-        var aggregates = ChangeTracker
-            .Entries<Order>()
-            .Select(e => e.Entity)
-            .Where(o => o.DomainEvents.Count > 0)
-            .ToList();
-
-        foreach (var aggregate in aggregates)
+        await using var tx = await Database.BeginTransactionAsync(ct);
+        try
         {
-            var messages = aggregate.DomainEvents
-                .Select(OutboxMessage.From)
-                .ToList();
-
-            OutboxMessages.AddRange(messages);
-            aggregate.ClearDomainEvents();
+            await action();
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
         }
     }
 }
 ```
 
-<Callout type="note" title="Domain event → outbox conversion">
-  `SaveChangesAsync` intercepts the save, reads domain events off all tracked
-  aggregates, converts them to `OutboxMessage` rows, and adds them to the change
-  tracker — all before the actual SQL is sent. The transaction that commits your
-  domain changes also commits the outbox rows.
-</Callout>
+### OrderRepository
 
----
-
-## The Application Service
-
-With the outbox wired into `SaveChangesAsync`, the application service becomes trivial:
-
-```csharp title="Application/PlaceOrderCommandHandler.cs"
-public sealed class PlaceOrderCommandHandler
+```csharp title="Infrastructure/Persistence/OrderRepository.cs"
+public sealed class OrderRepository : IOrderRepository
 {
     private readonly AppDbContext _db;
+    public OrderRepository(AppDbContext db) => _db = db;
 
-    public PlaceOrderCommandHandler(AppDbContext db) => _db = db;
+    public void Add(Order order) => _db.Orders.Add(order);
 
-    public async Task<Guid> HandleAsync(PlaceOrderCommand command, CancellationToken ct)
-    {
-        var order = Order.Place(command.CustomerId, command.Items);
-
-        await _db.Orders.AddAsync(order, ct);
-        await _db.SaveChangesAsync(ct); // writes order + outbox row atomically
-
-        return order.Id;
-    }
+    public Task<Order?> FindByIdAsync(Guid id, CancellationToken ct) =>
+        _db.Orders.FindAsync([id], ct).AsTask();
 }
 ```
 
-No mention of messaging anywhere in the application layer. The domain is clean, the infrastructure concern is fully contained in the `DbContext`.
+### IMessagePublisher and MassTransitPublisher
 
----
+`IMessagePublisher` is the interface the publisher background service calls. The `messageId` parameter exists specifically to stamp `OutboxMessage.Id` as the broker `MessageId` envelope header — implementing the [stable MessageId requirement](#where-does-the-messageid-come-from) from Part 1.
 
-## The Publisher: Polling Worker
+Without this stamp, MassTransit generates a fresh `Guid` per `Publish` call. A retry after a publisher crash would arrive with a different `MessageId`, and the consumer's deduplication table would treat it as a new event.
 
-The publisher is a `BackgroundService` that polls the outbox on a timer, publishes each pending message to the broker, and marks it as sent.
+```csharp title="Infrastructure/Outbox/IMessagePublisher.cs"
+public interface IMessagePublisher
+{
+    /// <param name="messageId">
+    ///   OutboxMessage.Id — stamped as the broker MessageId header so retries
+    ///   of the same outbox row always carry the same ID.
+    /// </param>
+    Task PublishAsync(object message, Guid messageId, CancellationToken ct = default);
+}
+```
 
-```csharp title="Infrastructure/OutboxPublisher.cs"
+```csharp title="Infrastructure/Outbox/MassTransitPublisher.cs"
+public sealed class MassTransitPublisher : IMessagePublisher
+{
+    private readonly IPublishEndpoint _endpoint;
+    public MassTransitPublisher(IPublishEndpoint endpoint) => _endpoint = endpoint;
+
+    public Task PublishAsync(object message, Guid messageId, CancellationToken ct) =>
+        _endpoint.Publish(
+            message,
+            message.GetType(),
+            ctx => ctx.MessageId = messageId,
+            ct);
+}
+```
+
+### OutboxPublisher
+
+The polling `BackgroundService`. It resolves a scoped `AppDbContext` and `IMessagePublisher` per iteration (singletons cannot hold scoped services), queries for pending rows, publishes each one passing its stable `Id`, and marks it sent.
+
+```csharp title="Infrastructure/Outbox/OutboxPublisher.cs"
 public sealed class OutboxPublisher : BackgroundService
 {
     private static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(5);
 
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IServiceScopeFactory     _scopeFactory;
     private readonly ILogger<OutboxPublisher> _logger;
 
     public OutboxPublisher(IServiceScopeFactory scopeFactory, ILogger<OutboxPublisher> logger)
     {
         _scopeFactory = scopeFactory;
-        _logger = logger;
+        _logger       = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -296,7 +749,7 @@ public sealed class OutboxPublisher : BackgroundService
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Outbox publisher encountered an error.");
+                _logger.LogError(ex, "Outbox publisher error.");
             }
 
             await Task.Delay(PollingInterval, stoppingToken);
@@ -305,8 +758,8 @@ public sealed class OutboxPublisher : BackgroundService
 
     private async Task ProcessBatchAsync(CancellationToken ct)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var scope     = _scopeFactory.CreateAsyncScope();
+        var db        = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var publisher = scope.ServiceProvider.GetRequiredService<IMessagePublisher>();
 
         var pending = await db.OutboxMessages
@@ -317,19 +770,18 @@ public sealed class OutboxPublisher : BackgroundService
 
         if (pending.Count == 0) return;
 
-        _logger.LogInformation("Publishing {Count} outbox messages.", pending.Count);
-
         foreach (var message in pending)
         {
             try
             {
-                var eventType = Type.GetType(message.Type)
-                    ?? throw new InvalidOperationException($"Cannot resolve type: {message.Type}");
+                var type    = Type.GetType(message.Type)
+                    ?? throw new InvalidOperationException($"Cannot resolve type '{message.Type}'.");
+                var payload = JsonSerializer.Deserialize(message.Payload, type)
+                    ?? throw new InvalidOperationException("Payload deserialized to null.");
 
-                var payload = JsonSerializer.Deserialize(message.Payload, eventType)
-                    ?? throw new InvalidOperationException("Deserialization returned null.");
-
-                await publisher.PublishAsync(payload, ct);
+                // message.Id is the stable UUID assigned when the outbox row was written.
+                // MassTransitPublisher stamps it as the MessageId envelope header.
+                await publisher.PublishAsync(payload, message.Id, ct);
                 message.MarkSent();
             }
             catch (Exception ex)
@@ -344,247 +796,370 @@ public sealed class OutboxPublisher : BackgroundService
 }
 ```
 
-### Message Publisher Abstraction
+### Competing Publishers
 
-```csharp title="Application/IMessagePublisher.cs"
-public interface IMessagePublisher
-{
-    Task PublishAsync(object message, CancellationToken ct = default);
-}
+When you run multiple service replicas, multiple publishers race over the same outbox rows. Add `FOR UPDATE SKIP LOCKED` to claim rows exclusively:
+
+```csharp title="Infrastructure/Outbox/OutboxPublisher.cs (skip locked)"
+var pending = await db.OutboxMessages
+    .FromSqlRaw(@"
+        SELECT * FROM ""OutboxMessages""
+        WHERE  ""SentAt"" IS NULL AND ""RetryCount"" < 5
+        ORDER  BY ""CreatedAt""
+        LIMIT  50
+        FOR UPDATE SKIP LOCKED")
+    .ToListAsync(ct);
 ```
 
-A concrete implementation against MassTransit or a Kafka producer fits here — the outbox logic is decoupled from the broker choice.
-
-```csharp title="Infrastructure/MassTransitPublisher.cs"
-public sealed class MassTransitPublisher : IMessagePublisher
-{
-    private readonly IPublishEndpoint _endpoint;
-
-    public MassTransitPublisher(IPublishEndpoint endpoint) => _endpoint = endpoint;
-
-    public Task PublishAsync(object message, CancellationToken ct) =>
-        _endpoint.Publish(message, message.GetType(), ct);
-}
-```
-
-### DI Registration
-
-```csharp title="Program.cs (registration)"
-builder.Services.AddDbContext<AppDbContext>(opts =>
-    opts.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
-
-builder.Services.AddScoped<IMessagePublisher, MassTransitPublisher>();
-builder.Services.AddHostedService<OutboxPublisher>();
-
-builder.Services.AddMassTransit(x =>
-{
-    x.AddConsumer<OrderPlacedConsumer>();
-    x.UsingRabbitMq((ctx, cfg) =>
-    {
-        cfg.Host(builder.Configuration["RabbitMq:Host"]);
-        cfg.ConfigureEndpoints(ctx);
-    });
-});
-```
+<Callout type="warning" title="SKIP LOCKED compatibility">
+  `FOR UPDATE SKIP LOCKED` is supported in PostgreSQL, MySQL 8+, and SQL Server
+  2022+. On older SQL Server, use `sp_getapplock` or a Redis distributed lock.
+</Callout>
 
 ---
 
-## Idempotency at the Consumer
+## Consumer Implementation: Inventory BC
 
-The Outbox Pattern guarantees **at-least-once delivery** — under a crash-between-publish-and-mark-sent scenario, the same message may be published twice. Consumers must handle duplicates.
+This section shows the full consumer-side implementation for the Inventory BC, applying the same Clean Architecture layers. The [deduplication guard](#the-deduplication-guard) and [atomic commit requirement](#the-deduplication-guard) from Part 1 are fully expressed here.
 
-<MermaidDiagram
-  code={`
-stateDiagram-v2
-    [*] --> Received : message arrives
-    Received --> CheckDedup : look up message id
-    CheckDedup --> AlreadyProcessed : found in processed_messages
-    CheckDedup --> Processing : not found
-    AlreadyProcessed --> [*] : discard (idempotent)
-    Processing --> Persist : execute business logic
-    Persist --> RecordDedup : insert into processed_messages
-    RecordDedup --> Ack : acknowledge to broker
-    Ack --> [*]
-`}
-/>
+The Notification BC and Billing BC follow the identical structure — only the domain aggregate and the business logic inside the handler differ.
+
+### Project structure
+
+```
+InventoryBC/
+├── Domain/
+│   ├── Aggregates/
+│   │   └── StockReservation.cs
+│   ├── Repositories/
+│   │   └── IStockReservationRepository.cs
+│   └── IHasDomainEvents.cs
+│
+├── Application/
+│   ├── Commands/
+│   │   ├── ReserveStockCommand.cs
+│   │   └── ReserveStockCommandHandler.cs
+│   └── Ports/
+│       ├── IUnitOfWork.cs              # same interface as Order BC
+│       └── IProcessedMessageRepository.cs
+│
+└── Infrastructure/
+    ├── Persistence/
+    │   ├── InventoryDbContext.cs
+    │   ├── StockReservationRepository.cs
+    │   └── ProcessedMessageRepository.cs
+    └── Messaging/
+        ├── Consumers/
+        │   └── OrderPlacedConsumer.cs
+        └── Integration/
+            └── OrderPlacedIntegrationEvent.cs
+```
+
+### Domain
+
+```csharp title="InventoryBC/Domain/Aggregates/StockReservation.cs"
+public sealed class StockReservation
+{
+    public Guid   Id         { get; private set; }
+    public Guid   OrderId    { get; private set; }
+    public IReadOnlyList<ReservationLine> Lines { get; private set; } = [];
+    public DateTimeOffset ReservedAt { get; private set; }
+
+    private StockReservation() { }
+
+    public static StockReservation Create(Guid orderId, IReadOnlyList<OrderLineDto> items)
+    {
+        if (items.Count == 0)
+            throw new DomainException("A reservation must cover at least one item.");
+
+        return new StockReservation
+        {
+            Id         = Guid.NewGuid(),
+            OrderId    = orderId,
+            Lines      = items.Select(i => ReservationLine.Create(i.ProductId, i.Quantity)).ToList(),
+            ReservedAt = DateTimeOffset.UtcNow,
+        };
+    }
+}
+```
+
+### Application Ports
+
+`IProcessedMessageRepository` abstracts the deduplication table. The handler calls it by interface — it never sees the SQL behind it. This is the application-layer expression of the [deduplication guard](#the-deduplication-guard) from Part 1.
+
+```csharp title="InventoryBC/Application/Ports/IProcessedMessageRepository.cs"
+public interface IProcessedMessageRepository
+{
+    /// <returns>
+    /// <c>true</c> if the MessageId was newly recorded — proceed with domain logic.
+    /// <c>false</c> if it already existed — duplicate, discard.
+    /// </returns>
+    Task<bool> TryRecordAsync(Guid messageId, CancellationToken ct = default);
+}
+```
+
+### Application Handler
+
+The handler contains the full use-case logic: deduplication check, aggregate creation, persistence. No MassTransit types, no raw SQL, fully unit-testable with mocks.
+
+```csharp title="InventoryBC/Application/Commands/ReserveStockCommandHandler.cs"
+/// <summary>
+/// MessageId is the broker envelope ID (OutboxMessage.Id from the Order BC),
+/// not part of the domain event payload. The consumer injects it from
+/// context.MessageId and passes it here for deduplication.
+/// See "Where does the MessageId come from?" in Part 1.
+/// </summary>
+public sealed record ReserveStockCommand(
+    Guid MessageId,
+    Guid OrderId,
+    IReadOnlyList<OrderLineDto> Items);
+
+public sealed class ReserveStockCommandHandler
+{
+    private readonly IStockReservationRepository _reservations;
+    private readonly IProcessedMessageRepository  _processedMessages;
+    private readonly IUnitOfWork                  _unitOfWork;
+
+    public ReserveStockCommandHandler(
+        IStockReservationRepository reservations,
+        IProcessedMessageRepository processedMessages,
+        IUnitOfWork unitOfWork)
+    {
+        _reservations      = reservations;
+        _processedMessages = processedMessages;
+        _unitOfWork        = unitOfWork;
+    }
+
+    public async Task HandleAsync(ReserveStockCommand command, CancellationToken ct)
+    {
+        var isNew = await _processedMessages.TryRecordAsync(command.MessageId, ct);
+        if (!isNew)
+            return; // duplicate — all side effects already applied on first delivery
+
+        var reservation = StockReservation.Create(command.OrderId, command.Items);
+        _reservations.Add(reservation);
+
+        // The caller (OrderPlacedConsumer) wraps this in ExecuteInTransactionAsync
+        // to ensure the processed_messages insert and this SaveChangesAsync commit
+        // atomically — see the atomic commit requirement in Part 1.
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+}
+```
+
+### Infrastructure — ProcessedMessageRepository
+
+```csharp title="InventoryBC/Infrastructure/Persistence/ProcessedMessageRepository.cs"
+public sealed class ProcessedMessageRepository : IProcessedMessageRepository
+{
+    private readonly InventoryDbContext _db;
+    public ProcessedMessageRepository(InventoryDbContext db) => _db = db;
+
+    public async Task<bool> TryRecordAsync(Guid messageId, CancellationToken ct)
+    {
+        // ON CONFLICT DO NOTHING: returns 0 rows affected if the row already exists.
+        // Runs on the same DbContext connection and participates in any ambient
+        // EF Core transaction started via BeginTransactionAsync.
+        var inserted = await _db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO processed_messages (message_id) VALUES ({0}) ON CONFLICT DO NOTHING",
+            messageId);
+
+        return inserted == 1;
+    }
+}
+```
+
+### Infrastructure — InventoryDbContext
+
+```csharp title="InventoryBC/Infrastructure/Persistence/InventoryDbContext.cs"
+public sealed class InventoryDbContext : DbContext, IUnitOfWork
+{
+    public DbSet<StockReservation> Reservations => Set<StockReservation>();
+
+    public InventoryDbContext(DbContextOptions<InventoryDbContext> options) : base(options) { }
+
+    protected override void OnModelCreating(ModelBuilder mb)
+    {
+        mb.Entity<StockReservation>(b =>
+        {
+            b.HasKey(r => r.Id);
+            b.OwnsMany(r => r.Lines, lines =>
+            {
+                lines.WithOwner();
+                lines.HasKey(l => l.Id);
+            });
+        });
+        // processed_messages is managed via raw SQL — no DbSet needed.
+    }
+
+    public async Task ExecuteInTransactionAsync(Func<Task> action, CancellationToken ct)
+    {
+        await using var tx = await Database.BeginTransactionAsync(ct);
+        try
+        {
+            await action();
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+}
+```
+
+### Infrastructure — Consumer (Thin Adapter)
+
+The consumer is a thin adapter. Its only job is to translate from the MassTransit contract to a `ReserveStockCommand` and call the application handler. It also owns the transaction boundary, because the [atomic commit requirement](#the-deduplication-guard) from Part 1 is an infrastructure concern — it spans raw SQL and EF Core tracked changes that only make sense at the I/O boundary.
+
+```csharp title="InventoryBC/Infrastructure/Messaging/Consumers/OrderPlacedConsumer.cs"
+public sealed class OrderPlacedConsumer : IConsumer<OrderPlacedIntegrationEvent>
+{
+    private readonly ReserveStockCommandHandler  _handler;
+    private readonly IUnitOfWork                 _unitOfWork;
+    private readonly ILogger<OrderPlacedConsumer> _logger;
+
+    public OrderPlacedConsumer(
+        ReserveStockCommandHandler handler,
+        IUnitOfWork unitOfWork,
+        ILogger<OrderPlacedConsumer> logger)
+    {
+        _handler    = handler;
+        _unitOfWork = unitOfWork;
+        _logger     = logger;
+    }
+
+    public async Task Consume(ConsumeContext<OrderPlacedIntegrationEvent> context)
+    {
+        // context.MessageId is OutboxMessage.Id from the Order BC, stamped by
+        // MassTransitPublisher onto the broker envelope. It is stable across
+        // retries of the same outbox row.
+        // The ?? fallback covers messages published outside the outbox pipeline
+        // (e.g. direct publishes in integration tests).
+        var messageId = context.MessageId ?? Guid.NewGuid();
+        var @event    = context.Message;
+
+        var command = new ReserveStockCommand(
+            MessageId: messageId,
+            OrderId:   @event.OrderId,
+            Items:     @event.Lines);
+
+        // Wrap in a transaction so the processed_messages insert (raw SQL, inside
+        // TryRecordAsync) and the reservation insert (EF Core, inside SaveChangesAsync)
+        // commit atomically. See the atomic commit requirement in Part 1.
+        await _unitOfWork.ExecuteInTransactionAsync(
+            () => _handler.HandleAsync(command, context.CancellationToken),
+            context.CancellationToken);
+
+        _logger.LogInformation(
+            "Processed {Event} {MessageId} in Inventory BC.",
+            nameof(OrderPlacedIntegrationEvent),
+            messageId);
+    }
+}
+```
+
+### Integration Event Contract
+
+```csharp title="InventoryBC/Infrastructure/Messaging/Integration/OrderPlacedIntegrationEvent.cs"
+// The Inventory BC owns its own copy of this contract.
+// It does not share a class library with the Order BC — only the shape is shared.
+// When the Order BC changes the event, the Inventory BC updates its copy.
+// This is the "published language" pattern in DDD.
+public sealed record OrderPlacedIntegrationEvent(
+    Guid OrderId,
+    Guid CustomerId,
+    IReadOnlyList<OrderLineDto> Lines,
+    DateTimeOffset PlacedAt);
+```
 
 ### Deduplication Table
 
-```sql title="Migration: processed_messages"
+Each BC that needs explicit deduplication owns its own `processed_messages` table — never shared across BCs.
+
+```sql title="Migration: processed_messages (per BC)"
 CREATE TABLE processed_messages (
     message_id   UUID        PRIMARY KEY,
     processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Optional: TTL cleanup (keep last 7 days)
+-- Retain enough history to cover the broker's max redelivery window.
+-- 7 days is a safe default for most RabbitMQ / SQS setups.
 CREATE INDEX idx_processed_messages_at ON processed_messages (processed_at);
 ```
 
-### Idempotent Consumer in C#
+<Callout type="tip" title="INSERT ON CONFLICT DO NOTHING">
+  This is an atomic check-and-insert. It avoids a separate `SELECT` and
+  eliminates the race condition between two concurrent consumers checking the
+  same `MessageId`. PostgreSQL evaluates the entire statement atomically under a
+  row-level lock.
+</Callout>
 
-```csharp title="Consumers/OrderPlacedConsumer.cs"
-public sealed class OrderPlacedConsumer : IConsumer<OrderPlaced>
+<Callout type="warning" title="Dedup insert and domain write must be atomic">
+  `TryRecordAsync` (raw SQL) and `SaveChangesAsync` (EF Core tracked changes)
+  run on the same database connection but are **not** in the same transaction
+  unless you explicitly start one. `ExecuteInTransactionAsync` in the consumer
+  provides that guarantee. A crash between the two without a transaction leaves
+  either a dedup row with no reservation (message silently lost on retry) or a
+  reservation with no dedup row (safe, but unintentional). Always wrap both in a
+  single transaction scope.
+</Callout>
+
+---
+
+## DI Registration
+
+```csharp title="Infrastructure/DependencyInjection.cs"
+public static class DependencyInjection
 {
-    private readonly AppDbContext _db;
-    private readonly ILogger<OrderPlacedConsumer> _logger;
-
-    public OrderPlacedConsumer(AppDbContext db, ILogger<OrderPlacedConsumer> logger)
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration)
     {
-        _db = db;
-        _logger = logger;
-    }
+        services.AddSingleton<DomainEventsToOutboxInterceptor>();
 
-    public async Task Consume(ConsumeContext<OrderPlaced> context)
-    {
-        var messageId = context.MessageId ?? Guid.NewGuid();
-
-        // Check for duplicate
-        var alreadyProcessed = await _db.Database
-            .ExecuteSqlRawAsync(
-                "INSERT INTO processed_messages (message_id) VALUES ({0}) ON CONFLICT DO NOTHING",
-                messageId);
-
-        if (alreadyProcessed == 0)
+        services.AddDbContext<AppDbContext>((sp, opts) =>
         {
-            _logger.LogInformation("Duplicate message {Id} — skipping.", messageId);
-            return;
-        }
+            opts.UseNpgsql(configuration.GetConnectionString("Postgres"));
+            opts.AddInterceptors(sp.GetRequiredService<DomainEventsToOutboxInterceptor>());
+        });
 
-        var @event = context.Message;
+        services.AddScoped<IUnitOfWork>(sp  => sp.GetRequiredService<AppDbContext>());
+        services.AddScoped<IOrderRepository,  OrderRepository>();
+        services.AddScoped<IMessagePublisher, MassTransitPublisher>();
+        services.AddHostedService<OutboxPublisher>();
 
-        // Actual business logic — safe to execute exactly once
-        await HandleOrderPlacedAsync(@event, context.CancellationToken);
-    }
+        services.AddMassTransit(x =>
+        {
+            x.AddConsumer<OrderPlacedConsumer>();
+            x.UsingRabbitMq((ctx, cfg) =>
+            {
+                cfg.Host(configuration["RabbitMq:Host"]);
+                cfg.ConfigureEndpoints(ctx);
+            });
+        });
 
-    private async Task HandleOrderPlacedAsync(OrderPlaced @event, CancellationToken ct)
-    {
-        // e.g. notify warehouse, send confirmation email, update read model...
-        _logger.LogInformation(
-            "Processing OrderPlaced for order {OrderId}, customer {CustomerId}.",
-            @event.OrderId,
-            @event.CustomerId);
-
-        await _db.SaveChangesAsync(ct);
+        return services;
     }
 }
 ```
-
-<Callout type="tip" title="INSERT ON CONFLICT DO NOTHING">
-  The `ON CONFLICT DO NOTHING` trick is an atomic check-and-insert. If the row
-  already exists (duplicate message), the insert silently does nothing and
-  returns 0 rows affected — no separate SELECT needed, no race condition.
-</Callout>
-
----
-
-## Dealing with Failures
-
-### Retry with Backoff
-
-The publisher tracks `RetryCount` on each outbox message. After a configurable threshold you can route to a dead-letter store or alert:
-
-```csharp title="Infrastructure/OutboxPublisher.cs (retry filter)"
-var pending = await db.OutboxMessages
-    .Where(m => m.SentAt == null && m.RetryCount < 5)  // max 5 attempts
-    .OrderBy(m => m.CreatedAt)
-    .Take(50)
-    .ToListAsync(ct);
-```
-
-### Dead-Letter Outbox Messages
-
-Messages that exceed the retry limit can be queried and inspected:
-
-```sql
-SELECT id, type, created_at, retry_count, error
-FROM outbox_messages
-WHERE sent_at IS NULL
-  AND retry_count >= 5
-ORDER BY created_at;
-```
-
-### Competing Publishers
-
-If you run multiple replicas of your service, multiple publishers will race over the same outbox rows. Use a `SELECT ... FOR UPDATE SKIP LOCKED` query to ensure each message is processed by exactly one publisher instance:
-
-```csharp title="Infrastructure/OutboxPublisher.cs (skip locked)"
-var pending = await db.OutboxMessages
-    .FromSqlRaw(@"
-        SELECT * FROM ""OutboxMessages""
-        WHERE ""SentAt"" IS NULL AND ""RetryCount"" < 5
-        ORDER BY ""CreatedAt""
-        LIMIT 50
-        FOR UPDATE SKIP LOCKED")
-    .ToListAsync(ct);
-```
-
-<Callout type="warning" title="SKIP LOCKED is PostgreSQL / SQL Server 2022+">
-  `FOR UPDATE SKIP LOCKED` is supported in PostgreSQL, MySQL 8+, and SQL Server
-  2022. On older SQL Server, use an application-level distributed lock (e.g.
-  `sp_getapplock` or a Redis lock) instead.
-</Callout>
-
----
-
-## Transaction Log Tailing (Alternative Publisher)
-
-Polling works well but introduces latency proportional to the polling interval. For low-latency requirements, **transaction log tailing** (CDC — Change Data Capture) is the alternative:
-
-<MermaidDiagram
-  code={`
-flowchart LR
-    A[Application] -->|INSERT outbox row| B[(Database WAL / Redo Log)]
-    B -->|stream changes| C[Debezium / CDC Agent]
-    C -->|publish| D[Kafka / Broker]
-    D -->|consume| E[Consumers]
-    style B fill:#1e1b2e,stroke:#818cf8
-    style C fill:#1e1b2e,stroke:#fbbf24
-    style D fill:#064e3b,stroke:#34d399
-`}
-/>
-
-Tools like [Debezium](https://debezium.io) tail the database's write-ahead log (WAL in PostgreSQL, redo log in MySQL) and stream row-level changes to Kafka topics in near real-time — without polling.
-
-| Approach          | Latency      | Complexity | Broker coupling  |
-| ----------------- | ------------ | ---------- | ---------------- |
-| Polling           | seconds      | low        | none             |
-| CDC / Log tailing | milliseconds | high       | Kafka / Debezium |
-
-For most services, polling at 1–5 second intervals is entirely acceptable. Reach for CDC only when end-to-end latency is a hard requirement.
-
----
-
-## Architecture Summary
-
-<MermaidDiagram
-  code={`
-flowchart TD
-    Client -->|PlaceOrder| Service
-    subgraph Service ["Service (single transaction)"]
-        direction LR
-        OrdersTable[(orders)]
-        OutboxTable[(outbox_messages)]
-    end
-    Service -->|atomic write| OrdersTable
-    Service -->|atomic write| OutboxTable
-    Publisher -->|poll + publish| OutboxTable
-    Publisher -->|mark sent| OutboxTable
-    Publisher -->|event| Broker[(Message Broker)]
-    Broker -->|consume| ConsumerA[Consumer A]
-    Broker -->|consume| ConsumerB[Consumer B]
-    ConsumerA -->|dedup check| ProcessedTable[(processed_messages)]
-    ConsumerB -->|dedup check| ProcessedTable
-`}
-/>
 
 ---
 
 ## Key Takeaways
 
-- **Write to the outbox in the same transaction as your domain changes.** This is the entire point — if the transaction rolls back, the outbox row rolls back with it.
-- **At-least-once delivery is the guarantee.** Design consumers to be idempotent; the `INSERT ON CONFLICT DO NOTHING` pattern makes this cheap.
-- **`SKIP LOCKED` for multiple publisher replicas.** Without it, publishers race and double-publish at high throughput.
-- **Polling is simpler than CDC.** Start with polling; the architecture is identical if you later swap in Debezium.
-- **Index `sent_at` and `created_at`.** The polling query hits these columns on every iteration — without indexes it becomes a full table scan as the outbox grows.
+**From the pattern:**
 
-The Outbox Pattern adds a small amount of infrastructure complexity in exchange for a strong reliability guarantee. In any system where message loss is unacceptable, that trade-off is an easy yes.
+- The outbox works because a database transaction is the only atomic primitive you actually control. Both rows (domain + outbox) commit or both roll back.
+- At-least-once delivery is the right default. Exactly-once is expensive; idempotent consumers are cheap.
+- The deduplication key must be stable across retries. This requires the publisher to explicitly stamp `OutboxMessage.Id` onto the broker envelope — without this, a library like MassTransit generates a new UUID per call.
+- Each BC owns its own `processed_messages` table. There is no shared deduplication state.
+
+**From the implementation:**
+
+- `OutboxMessage` is an infrastructure entity. Domain and Application layers never see it.
+- The `DomainEventsToOutboxInterceptor` keeps `AppDbContext` clean. One class, one responsibility.
+- `PlaceOrderCommandHandler` depends only on `IOrderRepository` and `IUnitOfWork`. No EF Core, no MassTransit — fully unit-testable.
+- The consumer is a thin adapter. All business logic lives in the application handler.
+- `ExecuteInTransactionAsync` on `IUnitOfWork` is the mechanism that makes the atomic dedup + domain write possible without leaking transaction management into the handler.
