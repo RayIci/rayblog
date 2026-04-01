@@ -1,0 +1,834 @@
+---
+title: "Enterprise Auth Architecture: Identity, Tokens, and Authorization at Scale"
+description: "A comprehensive guide to authentication and authorization in multi-application enterprise systems — from Identity Providers and OAuth 2.0 flows to fine-grained permissions and SSO, with concrete examples across three applications."
+pubDate: 2026-04-01
+tags: ["architecture", "backend", "authentication", "authorization"]
+image: "/images/enterprise-auth-architecture.svg"
+---
+
+import Callout from "@/components/Callout.astro";
+import MermaidDiagram from "@/components/MermaidDiagram.astro";
+
+Building a single application with user login is straightforward. Building a **platform** — multiple applications sharing the same user base, each with its own authorization logic, all connected through Single Sign-On — is an entirely different problem.
+
+This post walks through how enterprise organizations structure authentication and authorization across multiple applications. Instead of abstract theory, every concept is grounded in a concrete scenario: an organization running three products with shared users.
+
+---
+
+## The Scenario
+
+Throughout this post, we will work with a fictional organization that develops three products:
+
+| Product        | Description                  | Key Roles                           |
+| -------------- | ---------------------------- | ----------------------------------- |
+| **ShopZone**   | E-commerce marketplace       | Buyers, Sellers, Shop Collaborators |
+| **CoachUp**    | Online coaching platform     | Coaches, Students                   |
+| **StreamLive** | Live streaming (like Twitch) | Streamers, Viewers, Moderators      |
+
+Each product has its own frontend (SPA) and 2–3 backend microservices. The core requirement: **a user registers once and can use all three apps with the same account** — the same model as Google Account across Gmail, Drive, and YouTube.
+
+---
+
+## The Two Fundamental Problems
+
+Every system that manages users must solve two distinct problems:
+
+**Authentication** — _"Who are you?"_
+Verifying that the person is who they claim to be. This involves managing credentials, login flows, password resets, multi-factor authentication, and session management.
+
+**Authorization** — _"What are you allowed to do?"_
+Deciding whether a verified user has permission to perform a specific action on a specific resource. This involves roles, permissions, relationships between users and resources, and policy evaluation.
+
+These two problems have different characteristics and, in enterprise architecture, are solved by **different components**.
+
+<Callout type="warning" title="A common misconception">
+  Many developers conflate authentication with authorization because simple apps
+  handle both in the same place. At enterprise scale, mixing them creates
+  systems that are rigid, hard to evolve, and impossible to federate across
+  multiple applications.
+</Callout>
+
+---
+
+## The Protocols: OAuth 2.0 and OpenID Connect
+
+Before diving into architecture, you need to understand the two standards that everything is built on.
+
+### OAuth 2.0
+
+OAuth 2.0 is a **delegation framework for authorization**. It was _not_ designed for authentication. Its original purpose was to let an application access resources on behalf of a user without knowing the user's credentials — for example, letting a third-party app read your Google Calendar without you giving it your Google password.
+
+OAuth 2.0 defines several **grant types** (flows for obtaining tokens). The one relevant to modern SPAs and mobile apps is the **Authorization Code flow with PKCE** (Proof Key for Code Exchange), which we will cover in detail later.
+
+### OpenID Connect (OIDC)
+
+OpenID Connect is an **authentication layer built on top of OAuth 2.0**. It extends OAuth 2.0 by adding the concept of _who the user is_ to a protocol that originally only talked about _what you can access_.
+
+OIDC introduces:
+
+- The **ID Token** — a signed JWT that contains identity claims (name, email, subject identifier)
+- The **UserInfo endpoint** — an API to fetch additional profile information
+- A **discovery mechanism** (`/.well-known/openid-configuration`) — a URL that describes all the endpoints and capabilities of the provider
+
+### The Three Tokens
+
+Together, OAuth 2.0 and OIDC produce three types of tokens:
+
+| Token                            | Audience                       | Contains                                   | Purpose                                             | Lifetime          |
+| -------------------------------- | ------------------------------ | ------------------------------------------ | --------------------------------------------------- | ----------------- |
+| **ID Token** (JWT)               | The frontend                   | Identity claims: `sub`, `email`, `name`    | Display user info in the UI (e.g. "Hello, Mario")   | Short (minutes)   |
+| **Access Token** (JWT or opaque) | The API / microservices        | User identifier (`sub`) + minimal metadata | Sent to APIs in the `Authorization: Bearer` header  | Short (5–15 min)  |
+| **Refresh Token**                | The frontend (stored securely) | Opaque reference                           | Obtain a new access token without re-authenticating | Long (hours/days) |
+
+<Callout type="danger" title="Never send the ID Token to your APIs">
+  The ID Token is meant for the frontend to read identity claims. It is NOT a
+  credential for API access. Always use the Access Token for API calls. Sending
+  the ID Token to backends is a common mistake that breaks when token audiences
+  are validated correctly.
+</Callout>
+
+---
+
+## The Identity Provider
+
+The Identity Provider (IdP) is the component that solves the authentication problem. In our scenario, we use Keycloak, but the concepts apply equally to Auth0, AWS Cognito, Azure AD, Okta, or any OIDC-compliant provider.
+
+**What the IdP does:**
+
+- Manages user credentials (passwords, 2FA, social login connections)
+- Hosts the login page (the form where the user enters email and password)
+- Verifies the user's identity
+- Issues tokens (ID Token, Access Token, Refresh Token)
+- Exposes a public endpoint with cryptographic keys for token verification (`/.well-known/jwks.json`)
+- Manages SSO sessions across applications
+
+**What the IdP does NOT do (in the correct pattern):**
+
+- It does not know your business logic
+- It does not know what a "seller", "coach", or "streamer" is
+- It does not manage fine-grained permissions
+- It does not know that Mario is a collaborator on Luigi's shop
+
+The IdP is an **infrastructure service**, like a database or a message broker. Your applications use it, but business logic stays in your applications.
+
+<Callout type="tip" title="The IdP is a passport office, not a security guard">
+  Think of the IdP as the government office that issues passports. It verifies
+  your identity and gives you a document (token) that proves who you are. But
+  the passport office does not decide whether you can enter a specific building
+  — that is the building's security guard (your application's authorization
+  layer).
+</Callout>
+
+---
+
+## Architecture Overview
+
+Here is the full architecture of our organization. One Keycloak instance with a single Realm serves all three applications. Each application manages its own authorization independently.
+
+<MermaidDiagram
+  code={`
+flowchart TB
+    subgraph IDP["Keycloak — Realm: users"]
+        KC_Users["Users: Mario, Sara, Luigi..."]
+        KC_Clients["Clients: shopzone-web, coachup-web, streamlive-web"]
+        KC_Session["Session Store (SSO cookies)"]
+    end
+
+    subgraph SZ["ShopZone (E-commerce)"]
+        SZ_FE["Frontend SPA"]
+        SZ_Products["Products Service"]
+        SZ_Orders["Orders Service"]
+        SZ_Shop["Shop Service"]
+        SZ_DB[("ShopZone DB<br/>users, shops,<br/>shop_members,<br/>products, orders")]
+    end
+
+    subgraph CU["CoachUp (Coaching)"]
+        CU_FE["Frontend SPA"]
+        CU_Courses["Courses Service"]
+        CU_Booking["Booking Service"]
+        CU_Payments["Payments Service"]
+        CU_DB[("CoachUp DB<br/>users, courses,<br/>enrollments,<br/>sessions, reviews")]
+    end
+
+    subgraph SL["StreamLive (Streaming)"]
+        SL_FE["Frontend SPA"]
+        SL_Streams["Streams Service"]
+        SL_Chat["Chat Service"]
+        SL_Donations["Donations Service"]
+        SL_DB[("StreamLive DB<br/>users, channels,<br/>moderators,<br/>subscriptions, vods")]
+    end
+
+    IDP -- "JWT tokens" --> SZ_FE
+    IDP -- "JWT tokens" --> CU_FE
+    IDP -- "JWT tokens" --> SL_FE
+
+    SZ_FE --> SZ_Products
+    SZ_FE --> SZ_Orders
+    SZ_FE --> SZ_Shop
+    SZ_Products --> SZ_DB
+    SZ_Orders --> SZ_DB
+    SZ_Shop --> SZ_DB
+
+    CU_FE --> CU_Courses
+    CU_FE --> CU_Booking
+    CU_FE --> CU_Payments
+    CU_Courses --> CU_DB
+    CU_Booking --> CU_DB
+    CU_Payments --> CU_DB
+
+    SL_FE --> SL_Streams
+    SL_FE --> SL_Chat
+    SL_FE --> SL_Donations
+    SL_Streams --> SL_DB
+    SL_Chat --> SL_DB
+    SL_Donations --> SL_DB
+
+`}
+/>
+
+**Key design decisions:**
+
+- **One Realm, one user pool** — all users exist in a single Keycloak Realm, enabling SSO across all apps
+- **One Client per frontend** — each SPA is registered as an OAuth Client in Keycloak
+- **Backends are Resource Servers, not Clients** — microservices validate incoming JWTs but never initiate OAuth flows with Keycloak[^1]
+- **Each app has its own database** — roles, permissions, and business entities are fully owned by each application
+- **Keycloak has zero knowledge of business logic** — the JWT contains only identity, never application-specific roles
+
+[^1]: The exception is **service-to-service (M2M) communication**. If Microservice A needs to call Microservice B on its own behalf (not on behalf of a user), it can be registered as a **confidential client** in Keycloak and use the `client_credentials` grant to obtain its own access token. This is a separate concern from user authentication.
+
+---
+
+## Client Registration in Keycloak
+
+Every frontend must be registered as a **Client** in Keycloak. This is a security requirement — Keycloak needs to know which applications are allowed to request tokens and where to redirect users after login.
+
+```yaml title="Keycloak Client configuration for ShopZone"
+Client ID: shopzone-web
+Client Type: public # SPAs cannot keep a secret
+Grant Type: Authorization Code + PKCE # the modern, secure flow
+Redirect URIs: https://shopzone.example.com/callback
+Web Origins: https://shopzone.example.com
+```
+
+The same configuration is repeated for `coachup-web` and `streamlive-web`, each with their own redirect URIs.
+
+**Why register clients?** Not to assign roles. Purely for security:
+
+- Keycloak must know _who_ is requesting tokens
+- Keycloak must know _where_ to redirect the user after login (the `redirect_uri`)
+- Without client registration, any malicious website could request tokens from your IdP
+
+<Callout type="note" title="Public vs. Confidential Clients">
+  SPAs and mobile apps are **public clients** — their code runs on the user's
+  device, so they cannot securely store a client secret. Server-side
+  applications (like a traditional backend-rendered web app) are **confidential
+  clients** — they can hold a secret because the code runs on a controlled
+  server. The grant type and security model differ between the two. For SPAs,
+  Authorization Code + PKCE is the standard.
+</Callout>
+
+---
+
+## The Login Flow: Authorization Code with PKCE
+
+Let us trace exactly what happens when Mario opens ShopZone for the first time.
+
+<MermaidDiagram
+  code={`
+sequenceDiagram
+    actor Mario
+    participant Browser
+    participant ShopZone as ShopZone Frontend
+    participant KC as Keycloak
+
+    Mario->>Browser: Opens shopzone.example.com
+    Browser->>ShopZone: GET /
+    ShopZone->>ShopZone: No token in memory → redirect to Keycloak
+
+    ShopZone->>Browser: 302 Redirect
+    Note over Browser: Location: keycloak.example.com/auth<br/>?client_id=shopzone-web<br/>&response_type=code<br/>&redirect_uri=shopzone.example.com/callback<br/>&code_challenge=xyz...<br/>&scope=openid email profile
+
+    Browser->>KC: GET /auth?client_id=shopzone-web&...
+    KC->>Browser: Login page (HTML form)
+    Mario->>Browser: Enters email + password
+    Browser->>KC: POST credentials
+
+    KC->>KC: Verify credentials ✅
+    KC->>KC: Create server-side session
+    KC->>Browser: Set-Cookie: KEYCLOAK_SESSION=abc123
+    KC->>Browser: 302 Redirect to shopzone.example.com/callback?code=authcode123
+
+    Browser->>ShopZone: GET /callback?code=authcode123
+    ShopZone->>KC: POST /token {code, code_verifier}
+    KC->>ShopZone: {id_token, access_token, refresh_token}
+
+    ShopZone->>ShopZone: Store access token in memory
+    ShopZone->>Browser: Render app — "Hello, Mario"
+
+`}
+/>
+
+### Step by step
+
+**1. Mario opens ShopZone.** The frontend detects there is no access token in memory and initiates an OIDC login flow.
+
+**2. Redirect to Keycloak.** The frontend redirects the browser to Keycloak's authorization endpoint with these parameters:
+
+| Parameter        | Value                                   | Purpose                                               |
+| ---------------- | --------------------------------------- | ----------------------------------------------------- |
+| `client_id`      | `shopzone-web`                          | Identifies which registered client is asking          |
+| `response_type`  | `code`                                  | Requests an authorization code (not a token directly) |
+| `redirect_uri`   | `https://shopzone.example.com/callback` | Where to send the user after login                    |
+| `code_challenge` | SHA256 hash of a random verifier        | PKCE protection against code interception             |
+| `scope`          | `openid email profile`                  | What information to include in tokens                 |
+
+**3. Mario authenticates.** Keycloak shows the login page (styled with your custom theme via Keycloakify). Mario enters his credentials.
+
+**4. Keycloak creates a session.** This is critical for SSO. Keycloak does two things:
+
+- Creates a **server-side session** (stored in Keycloak's database or memory), containing: session ID, user reference, timestamp, which clients have been used
+- Sets a **cookie** on the browser for the Keycloak domain:
+
+```http title="Set-Cookie header from Keycloak"
+Set-Cookie: KEYCLOAK_SESSION=abc123xyz;
+            Domain=keycloak.example.com;
+            Path=/realms/users/;
+            HttpOnly;
+            Secure;
+            SameSite=None
+```
+
+**5. Redirect back with authorization code.** Keycloak redirects the browser back to ShopZone's callback URL with a temporary, single-use authorization code.
+
+**6. Code exchange.** The frontend sends the authorization code and the PKCE code verifier to Keycloak's token endpoint. Keycloak verifies the code verifier matches the original code challenge, then returns the tokens:
+
+```json title="Token response from Keycloak"
+{
+  "id_token": "eyJhbGciOiJSUzI1NiIs...",
+  "access_token": "eyJhbGciOiJSUzI1NiIs...",
+  "refresh_token": "eyJhbGciOiJSUzI1NiIs...",
+  "expires_in": 300,
+  "token_type": "Bearer"
+}
+```
+
+**7. Token storage.** The frontend stores:
+
+- **Access token** in a JavaScript variable (memory only — cleared on page refresh, not accessible to other scripts)
+- **Refresh token** in an `httpOnly` secure cookie (not accessible to JavaScript, preventing XSS theft)
+
+<Callout type="warning" title="Never store access tokens in localStorage">
+  `localStorage` is accessible to any JavaScript running on your domain. A
+  single XSS vulnerability would let an attacker steal all tokens. In-memory
+  storage (a JS variable) is the safest option for SPAs — the token disappears
+  on refresh, and the refresh token (in an httpOnly cookie) silently obtains a
+  new one.
+</Callout>
+
+### What is PKCE and why does it matter?
+
+PKCE (Proof Key for Code Exchange, pronounced "pixie") solves a specific attack vector: **authorization code interception**. Without PKCE, if an attacker intercepts the authorization code during the redirect (possible on mobile via custom URL schemes or through open redirects), they could exchange it for tokens.
+
+With PKCE:
+
+1. The frontend generates a random `code_verifier` (a high-entropy string)
+2. It computes `code_challenge = SHA256(code_verifier)` and sends the challenge with the initial request
+3. When exchanging the code for tokens, it sends the original `code_verifier`
+4. Keycloak verifies that `SHA256(code_verifier) == code_challenge`
+5. An attacker who intercepted only the code cannot exchange it without the verifier
+
+---
+
+## SSO: How Single Sign-On Actually Works
+
+After logging into ShopZone, Mario opens CoachUp. The SSO mechanism lets him in **without entering credentials again**. Critically, SSO does not use application tokens — it works entirely through the **browser cookie on Keycloak's domain**.
+
+### The browser's cookie jar after ShopZone login
+
+At this point, Mario's browser holds:
+
+| Domain                 | Cookie                       | Set by                           |
+| ---------------------- | ---------------------------- | -------------------------------- |
+| `keycloak.example.com` | `KEYCLOAK_SESSION=abc123xyz` | Keycloak (during ShopZone login) |
+| `shopzone.example.com` | Application cookies          | ShopZone frontend                |
+| `coachup.example.com`  | _(nothing yet)_              | —                                |
+
+### What happens when Mario opens CoachUp
+
+<MermaidDiagram
+  code={`
+sequenceDiagram
+    actor Mario
+    participant Browser
+    participant CoachUp as CoachUp Frontend
+    participant KC as Keycloak
+
+    Mario->>Browser: Opens coachup.example.com
+    Browser->>CoachUp: GET /
+    CoachUp->>CoachUp: No token in memory → redirect to Keycloak
+
+    CoachUp->>Browser: 302 Redirect
+    Note over Browser: Location: keycloak.example.com/auth<br/>?client_id=coachup-web&...
+
+    Browser->>KC: GET /auth?client_id=coachup-web&...
+    Note over Browser,KC: Browser AUTOMATICALLY attaches<br/>Cookie: KEYCLOAK_SESSION=abc123xyz<br/>(standard browser behavior for keycloak.example.com)
+
+    KC->>KC: Read cookie → find session abc123xyz
+    KC->>KC: Session valid? ✅ User: Mario ✅
+    Note over KC: NO login form shown
+
+    KC->>KC: Generate auth code for coachup-web
+    KC->>KC: Update session: clients_used += coachup-web
+    KC->>Browser: 302 Redirect to coachup.example.com/callback?code=def456
+
+    Browser->>CoachUp: GET /callback?code=def456
+    CoachUp->>KC: POST /token {code, code_verifier}
+    KC->>CoachUp: {id_token, access_token, refresh_token}
+
+    CoachUp->>Browser: Render app — "Hello, Mario"
+    Note over Mario,CoachUp: Mario never typed any credentials
+
+`}
+/>
+
+### The key mechanism
+
+When the browser is redirected to `keycloak.example.com`, it **automatically attaches all cookies for that domain** — this is standard HTTP behavior, not something custom. Keycloak reads the session cookie, finds the active session, confirms the user is already authenticated, and immediately generates an authorization code for the new client. No login form is shown.
+
+The server-side session in Keycloak is updated to track which clients Mario has used:
+
+```json title="Keycloak server-side session (after both logins)"
+{
+  "session_id": "abc123xyz",
+  "user": "uuid-mario",
+  "authenticated_at": "2026-04-01T10:00:00Z",
+  "expires": "2026-04-01T18:00:00Z",
+  "clients_used": ["shopzone-web", "coachup-web"]
+}
+```
+
+### Why applications never share tokens
+
+Each application receives its **own set of tokens** from Keycloak. ShopZone's tokens live on `shopzone.example.com`, CoachUp's tokens live on `coachup.example.com`. Neither application can see the other's tokens — they are on different domains.
+
+The **only shared state** is the Keycloak session cookie on `keycloak.example.com`. The browser sends it automatically whenever the user is redirected to Keycloak, and this is the entire SSO mechanism.
+
+The same process repeats identically when Mario opens StreamLive — redirect to Keycloak, cookie found, no login, redirect back with tokens.
+
+<Callout type="tip" title="SSO logout">
+  The reverse works too. When a user logs out from one application, the frontend
+  can call Keycloak's `end_session_endpoint`. Keycloak invalidates the
+  server-side session and can notify all other clients via **back-channel
+  logout** (a POST to each client's registered logout URL). This ensures the
+  user is logged out from all applications simultaneously.
+</Callout>
+
+---
+
+## Application-Level Authorization
+
+Mario has a single account, but on each application he has a different profile with different roles and permissions. The tokens issued by Keycloak contain **only identity** — no application-specific roles, no permissions, no business logic. Every application manages its own authorization independently.
+
+### Local User Provisioning
+
+When Mario accesses ShopZone for the first time, the backend creates a local user profile linked to his Keycloak identity:
+
+```json title="Decoded access token payload"
+{
+  "sub": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "mario@example.com",
+  "name": "Mario Rossi",
+  "iss": "https://keycloak.example.com/realms/users",
+  "aud": "shopzone-web",
+  "exp": 1743508500
+}
+```
+
+The `sub` (subject) claim is a **stable UUID** that never changes for a given user, even if they change their email or name. This is the key you use to link Keycloak identity to your local user records.
+
+```text title="First-request provisioning flow"
+1. Validate JWT (signature + expiration)
+2. Extract sub = "550e8400..."
+3. SELECT * FROM users WHERE idp_sub = '550e8400...'
+4. Not found → first access
+5. INSERT INTO users (idp_sub, email, name, role)
+   VALUES ('550e8400...', 'mario@example.com', 'Mario Rossi', 'buyer')
+6. Mario is now a buyer on ShopZone with a local user_id
+```
+
+The same process happens independently on CoachUp (default role: `student`) and StreamLive (default role: `viewer`). Three records in three databases, all linked by the same `sub`.
+
+### Why roles do not belong in the JWT
+
+Mario might be a `seller` on ShopZone, a `student` on CoachUp, and a `streamer` on StreamLive. If these roles were in the JWT:
+
+- Keycloak would need to know the business logic of every application
+- Every time you add an app or change business rules, you would need to reconfigure Keycloak
+- The IdP would become a repository of business logic, which is not its responsibility
+- Token size would grow with every new application and role
+
+By keeping roles in each application's database, every app is **independent and autonomous**. You can add a fourth app tomorrow without touching Keycloak at all.
+
+### Database Schemas
+
+Each application owns its full authorization model. The only common element is the `idp_sub` column linking to Keycloak.
+
+```sql title="ShopZone — E-commerce"
+CREATE TABLE users (
+    id          SERIAL PRIMARY KEY,
+    idp_sub     UUID UNIQUE NOT NULL,    -- link to Keycloak
+    email       TEXT NOT NULL,
+    role        TEXT DEFAULT 'buyer',     -- buyer | seller
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE shops (
+    id          SERIAL PRIMARY KEY,
+    owner_id    INT REFERENCES users(id),
+    name        TEXT NOT NULL,
+    slug        TEXT UNIQUE NOT NULL
+);
+
+-- Fine-grained: who can do what on which shop
+CREATE TABLE shop_members (
+    shop_id     INT REFERENCES shops(id),
+    user_id     INT REFERENCES users(id),
+    permissions TEXT[] NOT NULL,  -- e.g. {'add_products','edit_products','view_orders'}
+    PRIMARY KEY (shop_id, user_id)
+);
+
+CREATE TABLE products (
+    id          SERIAL PRIMARY KEY,
+    shop_id     INT REFERENCES shops(id),
+    title       TEXT NOT NULL,
+    price       DECIMAL NOT NULL
+);
+```
+
+```sql title="CoachUp — Online coaching"
+CREATE TABLE users (
+    id          SERIAL PRIMARY KEY,
+    idp_sub     UUID UNIQUE NOT NULL,
+    email       TEXT NOT NULL,
+    role        TEXT DEFAULT 'student',   -- student | coach
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE courses (
+    id          SERIAL PRIMARY KEY,
+    coach_id    INT REFERENCES users(id),
+    title       TEXT NOT NULL,
+    price       DECIMAL NOT NULL
+);
+
+CREATE TABLE enrollments (
+    course_id   INT REFERENCES courses(id),
+    student_id  INT REFERENCES users(id),
+    enrolled_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (course_id, student_id)
+);
+```
+
+```sql title="StreamLive — Live streaming"
+CREATE TABLE users (
+    id          SERIAL PRIMARY KEY,
+    idp_sub     UUID UNIQUE NOT NULL,
+    email       TEXT NOT NULL,
+    role        TEXT DEFAULT 'viewer',    -- viewer | streamer
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE channels (
+    id          SERIAL PRIMARY KEY,
+    owner_id    INT REFERENCES users(id),
+    name        TEXT UNIQUE NOT NULL,
+    stream_key  TEXT NOT NULL
+);
+
+-- Fine-grained: who can moderate which channel
+CREATE TABLE moderators (
+    channel_id  INT REFERENCES channels(id),
+    user_id     INT REFERENCES users(id),
+    permissions TEXT[] NOT NULL,  -- e.g. {'ban_users','delete_messages','slow_mode'}
+    PRIMARY KEY (channel_id, user_id)
+);
+```
+
+Notice the recurring pattern: every application has its own `users` table with `idp_sub` as the link to Keycloak identity. Roles and permissions are entirely application-owned. Keycloak knows nothing about them.
+
+---
+
+## How Microservices Validate Tokens and Authorize
+
+### Token Validation: Zero Network Calls
+
+Every microservice, at startup, downloads the public keys from Keycloak's JWKS endpoint:
+
+```text title="JWKS endpoint"
+GET https://keycloak.example.com/realms/users/protocol/openid-connect/certs
+
+Response: { "keys": [{ "kty": "RSA", "kid": "abc", "n": "...", "e": "AQAB" }] }
+```
+
+From that point on, **no calls to Keycloak are needed**. Token validation is a local cryptographic operation: verify the RSA signature against the cached public key, check the expiration timestamp, check the issuer and audience claims. This takes microseconds and requires zero network round-trips.
+
+<Callout type="note" title="Key rotation">
+  Keycloak rotates signing keys periodically. When a microservice encounters a
+  JWT signed with an unknown `kid` (key ID), it re-fetches the JWKS endpoint to
+  get the new keys. Most JWT libraries handle this automatically. Between
+  rotations, no calls to Keycloak occur.
+</Callout>
+
+### The Full Request Lifecycle
+
+Let us trace a concrete request: Sara, a shop collaborator, adds a product to Luigi's shop on ShopZone.
+
+**Context:** Luigi owns the shop "Luigi's Pizza" (`shop_id: 42`) on ShopZone. He added Sara as a collaborator with permissions `["add_products", "edit_products"]`.
+
+```text title="The request"
+POST https://api.shopzone.example.com/shops/42/products
+Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+Content-Type: application/json
+
+{ "title": "Pizza Margherita", "price": 8.50 }
+```
+
+<MermaidDiagram
+  code={`
+flowchart TD
+    A["Incoming Request<br/>POST /shops/42/products<br/>+ Bearer JWT"] --> B{"1. AUTHENTICATION<br/>Validate JWT"}
+    B -- "Invalid signature / expired" --> B_FAIL["401 Unauthorized"]
+    B -- "Valid → sub: uuid-sara" --> C{"2. IDENTIFICATION<br/>Who is uuid-sara locally?"}
+    C -- "Redis HIT" --> D["user_id = 15"]
+    C -- "Redis MISS" --> C_DB["SELECT FROM users<br/>WHERE idp_sub = uuid-sara"]
+    C_DB --> C_CACHE["Cache in Redis<br/>TTL 5 min"]
+    C_CACHE --> D
+    D --> E{"3. AUTHORIZATION<br/>Can user 15 add_products<br/>on shop 42?"}
+    E -- "Redis HIT" --> F["Permissions:<br/>add_products, edit_products"]
+    E -- "Redis MISS" --> E_DB["SELECT permissions<br/>FROM shop_members<br/>WHERE user_id=15 AND shop_id=42"]
+    E_DB --> E_CACHE["Cache in Redis<br/>TTL 5 min"]
+    E_CACHE --> F
+    F --> G{"add_products ∈ permissions?"}
+    G -- "No" --> G_FAIL["403 Forbidden"]
+    G -- "Yes ✅" --> H["4. EXECUTE<br/>INSERT INTO products<br/>→ 201 Created"]
+`}
+/>
+
+#### Step 1 — Authentication (JWT validation)
+
+```text
+├── Verify RSA signature with Keycloak's public key (cached locally)
+├── Verify exp > current time (not expired)
+├── Verify iss == "https://keycloak.example.com/realms/users"
+└── Extract: sub = "uuid-sara"
+
+If any check fails → 401 Unauthorized (identity not proven)
+```
+
+This step involves **zero network calls** — it is a pure cryptographic operation.
+
+#### Step 2 — Identification (map external identity to local user)
+
+```text
+├── Redis GET user:uuid-sara
+│   ├── HIT  → user_id = 15               (~1ms, no DB query)
+│   └── MISS → SELECT * FROM users
+│              WHERE idp_sub = 'uuid-sara'
+│              → user_id = 15, role = 'buyer'
+│              → Redis SET user:uuid-sara {id:15, role:"buyer"} TTL 5min
+└── Result: Sara = local user_id 15
+```
+
+#### Step 3 — Authorization (check fine-grained permissions)
+
+```text
+├── Redis GET perms:15:shop:42
+│   ├── HIT  → ["add_products", "edit_products"]     (~1ms)
+│   └── MISS → SELECT permissions FROM shop_members
+│              WHERE user_id = 15 AND shop_id = 42
+│              → ["add_products", "edit_products"]
+│              → Redis SET perms:15:shop:42 [...] TTL 5min
+├── Required permission for this action: "add_products"
+├── "add_products" ∈ ["add_products", "edit_products"]? ✅
+└── AUTHORIZED
+```
+
+#### Step 4 — Execution
+
+```sql
+INSERT INTO products (shop_id, title, price)
+VALUES (42, 'Pizza Margherita', 8.50);
+-- → 201 Created
+```
+
+### When authorization fails
+
+If Sara tries to delete the shop:
+
+```text title="DELETE /shops/42 — authorization check"
+├── Sara's permissions on shop 42: ["add_products", "edit_products"]
+├── Deleting a shop requires ownership
+│   SELECT owner_id FROM shops WHERE id = 42 → owner_id = 3 (Luigi)
+│   Sara (user_id=15) ≠ owner (user_id=3)
+└── 403 Forbidden
+```
+
+---
+
+## Cache Invalidation: When Permissions Change
+
+Caching permissions in Redis is critical for performance, but introduces a question: what happens when permissions change?
+
+### Single-service invalidation
+
+Luigi removes Sara as a collaborator:
+
+```text title="DELETE /shops/42/members/15"
+Shop Service:
+1. Verify Luigi is owner of shop 42 ✅
+2. DELETE FROM shop_members WHERE shop_id = 42 AND user_id = 15
+3. Redis DEL perms:15:shop:42    ← immediate cache invalidation
+
+Next request from Sara:
+  → Redis MISS → DB query → no record found → 403 Forbidden
+```
+
+### Multi-service invalidation via events
+
+When multiple microservices cache the same permissions (e.g., the Products Service and the Orders Service both need to check shop membership), invalidation should propagate through an event:
+
+<MermaidDiagram
+  code={`
+sequenceDiagram
+    participant Luigi
+    participant ShopService as Shop Service
+    participant Broker as Message Broker
+    participant ProductsService as Products Service
+    participant OrdersService as Orders Service
+
+    Luigi->>ShopService: DELETE /shops/42/members/15
+    ShopService->>ShopService: Delete from DB
+    ShopService->>ShopService: Redis DEL perms:15:shop:42
+    ShopService->>Broker: Event: member_removed {shop:42, user:15}
+
+    Broker->>ProductsService: member_removed {shop:42, user:15}
+    ProductsService->>ProductsService: Redis DEL perms:15:shop:42
+
+    Broker->>OrdersService: member_removed {shop:42, user:15}
+    OrdersService->>OrdersService: Redis DEL perms:15:shop:42
+
+`}
+/>
+
+### The staleness window
+
+Even with events, there is a brief window (milliseconds to seconds) where a user might still have cached permissions after they were revoked. In most applications, this is perfectly acceptable. For high-security scenarios (banking, healthcare), you can:
+
+- Use shorter cache TTLs (30 seconds instead of 5 minutes)
+- Skip the cache entirely for destructive operations (always query the DB for `DELETE` actions)
+- Use Redis Pub/Sub for near-instant cross-service invalidation
+
+---
+
+## When Cache Is Not Enough: The Zanzibar Pattern
+
+The ShopZone scenario — collaborators with per-shop permissions — is already reasonably complex. If your authorization model grows to include **permission inheritance** (e.g., an "organization" that owns multiple shops, and org-level admins automatically have access to all shops), **teams**, or **hierarchical resources**, the cache + SQL query pattern does not scale well.
+
+Google published a paper in 2019 describing **Zanzibar** — the system they use to handle authorization across Gmail, Drive, YouTube, and Cloud, processing millions of permission checks per second.
+
+### The Zanzibar model
+
+Everything is modeled as **relationship tuples**:
+
+```text title="Relationship tuples"
+(luigi,  owner,        shop:42)
+(sara,   collaborator, shop:42)
+(shop:42, parent,      org:luigis-food)
+(admin,  org_admin,    org:luigis-food)
+```
+
+A permission check like _"Can Sara add products to shop 42?"_ is resolved by traversing the relationship graph:
+
+```text
+sara → collaborator of shop:42
+  → collaborators have permission add_products (defined in the schema)
+  → ✅ Authorized
+```
+
+And for inherited permissions: _"Can admin manage shop 42?"_
+
+```text
+admin → org_admin of org:luigis-food
+  → org:luigis-food is parent of shop:42
+  → org_admins inherit all permissions on child resources
+  → ✅ Authorized
+```
+
+### Open-source implementations
+
+- **SpiceDB** (by AuthZed) — full Zanzibar implementation, gRPC API, its own schema language
+- **OpenFGA** (by Okta/Auth0) — similar model, HTTP/gRPC API, backed by Auth0
+
+For most applications starting out, **Redis + database queries are more than sufficient**. Zanzibar-based systems become valuable when your permission model involves deep hierarchies, resource inheritance, or you need to answer permission questions across thousands of resources efficiently.
+
+---
+
+## Integrating a Corporate Identity Provider
+
+So far we have discussed application users — the Marios and Saras who sign up to use your products. But the organization also has employees with a **Corporate IdP** (Azure AD, Okta, Google Workspace, etc.). There are two common patterns:
+
+### Pattern A — Complete separation (employees use backoffice only)
+
+```text
+Keycloak
+  ├── Realm: "users"        ← application users (Mario, Sara...)
+  └── Realm: "internal"     ← employees
+        └── Federated with Corporate IdP (SAML / OIDC)
+            Employees access the admin panel with corporate credentials
+```
+
+Two completely separate worlds. Application users never interact with the corporate IdP, and employees do not have application user accounts.
+
+### Pattern B — Employees can also use the apps (federation)
+
+```text
+Keycloak — Realm: "users"
+  ├── Local users: Mario, Sara, Luigi...    (email + password)
+  └── Identity Provider: Corporate IdP
+        └── "Login with Corporate Account" button on the login page
+            → Keycloak delegates authentication to the Corporate IdP
+            → On success, Keycloak creates a local user linked to the
+              corporate identity
+            → The employee is now an application user like everyone else
+```
+
+In this pattern, the Keycloak login page shows two options: standard email/password and "Login with Corporate Account". When an employee chooses the latter, Keycloak redirects to the Corporate IdP, receives an assertion (SAML) or token (OIDC) back, and provisions a local user. From the application's perspective, this user is identical to any other — the provisioning flow and `idp_sub` linkage works the same way.
+
+---
+
+## Scaling Your Authorization Strategy
+
+As your platform grows, your authorization needs will evolve. Here is a practical progression:
+
+| Phase          | Authorization Approach                        | When to use                                                  |
+| -------------- | --------------------------------------------- | ------------------------------------------------------------ |
+| **MVP**        | JWT identity + direct DB queries              | Getting started, few users, simple permissions               |
+| **Growth**     | JWT identity + DB queries + Redis cache       | Moderate traffic, need sub-millisecond auth checks           |
+| **Scale**      | Dedicated authorization service (OPA, Cerbos) | Complex policies, multiple teams, audit requirements         |
+| **Enterprise** | Zanzibar-based system (SpiceDB, OpenFGA)      | Deep hierarchies, inheritance, millions of permission checks |
+
+Each phase builds on the previous one. You do not need to start with Zanzibar — but it helps to know it exists so you design your permission model in a way that can migrate forward.
+
+---
+
+## Summary: Who Does What
+
+| Component                   | Responsibility                                                                                                            | Does NOT                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| **Keycloak (IdP)**          | User registration, login, credential management, token issuance, SSO (via session cookies), 2FA, password reset           | Know about application roles, permissions, or business logic |
+| **Keycloak Session Cookie** | Lives on `keycloak.example.com`, automatically sent by the browser on redirects, enables SSO                              | Get seen or used by any application directly                 |
+| **JWT (Access Token)**      | Carries identity (`sub`, `email`), validated locally via cryptography, short-lived (5–15 min)                             | Carry application roles or fine-grained permissions          |
+| **Each Application (DB)**   | Local user provisioning, application-specific roles, fine-grained permissions, resource relationships, all business logic | Share its authorization data with other applications         |
+| **Redis (Cache)**           | Sub-millisecond permission lookups, invalidated on permission changes, prevents DB queries on every request               | Replace the database as source of truth                      |
+
+The boundary is clear: **Keycloak proves identity, your applications decide what that identity is allowed to do.** This separation lets each application evolve its authorization model independently, lets you add new applications to your platform without touching the IdP, and gives you a single user account that works everywhere — just like Google, Microsoft, or any major platform.

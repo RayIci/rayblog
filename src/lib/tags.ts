@@ -6,6 +6,8 @@ export const TAGS = [
   "backend",
   "dotnet",
   "pattern",
+  "authentication",
+  "authorization",
 ] as const;
 
 export type Tag = (typeof TAGS)[number];

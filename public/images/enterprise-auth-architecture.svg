@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#0e0c14" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b2e"/>
+      <stop offset="100%" stop-color="#16131f"/>
+    </linearGradient>
+    <linearGradient id="idpGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#312e81" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#1e1b4b" stop-opacity="0.7"/>
+    </linearGradient>
+    <linearGradient id="appGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#5b21b6" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="appGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#065f46" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#064e3b" stop-opacity="0.5"/>
+    </linearGradient>
+    <linearGradient id="appGrad3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#92400e" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#78350f" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="tokenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#818cf8" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.3"/>
+    </linearGradient>
+    <marker id="arrowIndigo" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#818cf8"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#a78bfa"/>
+    </marker>
+    <marker id="arrowAmber" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#fbbf24"/>
+    </marker>
+  </defs>
+
+  <!-- Base -->
+  <rect width="1200" height="630" fill="#0e0c14"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- Dot grid -->
+  <pattern id="dots" x="0" y="0" width="36" height="36" patternUnits="userSpaceOnUse">
+    <circle cx="18" cy="18" r="0.9" fill="#6366f1" opacity="0.1"/>
+  </pattern>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+
+  <!-- ─── Title area ─── -->
+  <text x="600" y="72" text-anchor="middle" font-family="monospace" font-size="12" letter-spacing="5" fill="#6366f1" opacity="0.85">ENTERPRISE ARCHITECTURE</text>
+  <text x="600" y="126" text-anchor="middle" font-family="system-ui, sans-serif" font-size="50" font-weight="700" fill="#f1f5f9" letter-spacing="-1.5">Auth, Identity &amp; SSO</text>
+
+  <!-- ─── Keycloak / IdP box (center top) ─── -->
+  <rect x="410" y="170" width="380" height="140" rx="14" fill="url(#idpGrad)" stroke="#818cf8" stroke-opacity="0.6" stroke-width="1.5"/>
+
+  <!-- Shield icon -->
+  <path d="M 520 205 L 520 230 Q 520 248 535 255 Q 520 248 520 230 Z" fill="none"/>
+  <path d="M 535 195 L 555 205 L 555 225 Q 555 245 535 255 Q 515 245 515 225 L 515 205 Z" fill="none" stroke="#a5b4fc" stroke-width="1.5" stroke-opacity="0.7"/>
+  <path d="M 528 220 L 533 226 L 543 213" fill="none" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.8"/>
+
+  <text x="600" y="217" text-anchor="middle" font-family="monospace" font-size="16" font-weight="700" fill="#c7d2fe">Identity Provider</text>
+  <text x="600" y="237" text-anchor="middle" font-family="monospace" font-size="11" fill="#818cf8" opacity="0.8">Keycloak / Auth0 / Cognito</text>
+
+  <!-- Session cookie indicator -->
+  <rect x="460" y="260" width="120" height="28" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="520" y="279" text-anchor="middle" font-family="monospace" font-size="9" fill="#a5b4fc">SSO Session</text>
+
+  <!-- Token indicator -->
+  <rect x="620" y="260" width="120" height="28" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="680" y="279" text-anchor="middle" font-family="monospace" font-size="9" fill="#a5b4fc">JWT Tokens</text>
+
+  <!-- User icon (left of IdP) -->
+  <circle cx="340" cy="220" r="16" fill="none" stroke="#818cf8" stroke-opacity="0.5" stroke-width="1.2"/>
+  <circle cx="340" cy="214" r="5.5" fill="none" stroke="#818cf8" stroke-opacity="0.5" stroke-width="1.2"/>
+  <path d="M 329 230 Q 340 238 351 230" fill="none" stroke="#818cf8" stroke-opacity="0.5" stroke-width="1.2"/>
+  <text x="340" y="250" text-anchor="middle" font-family="monospace" font-size="9" fill="#818cf8" opacity="0.7">User</text>
+
+  <!-- Arrow user → IdP -->
+  <line x1="358" y1="220" x2="405" y2="220" stroke="#818cf8" stroke-width="1.5" opacity="0.6" marker-end="url(#arrowIndigo)"/>
+  <text x="382" y="213" text-anchor="middle" font-family="monospace" font-size="8" fill="#818cf8" opacity="0.6">login</text>
+
+  <!-- ─── Three App boxes ─── -->
+
+  <!-- App 1: ShopZone (left) -->
+  <rect x="80" y="380" width="280" height="170" rx="12" fill="url(#cardGrad)" stroke="#a78bfa" stroke-opacity="0.4" stroke-width="1.5"/>
+  <text x="220" y="408" text-anchor="middle" font-family="monospace" font-size="14" font-weight="700" fill="#ddd6fe">ShopZone</text>
+  <text x="220" y="425" text-anchor="middle" font-family="monospace" font-size="9" fill="#a78bfa" opacity="0.7">e-commerce</text>
+  <line x1="80" y1="434" x2="360" y2="434" stroke="#a78bfa" stroke-opacity="0.15" stroke-width="1"/>
+
+  <!-- ShopZone microservices -->
+  <rect x="100" y="446" width="72" height="26" rx="4" fill="url(#appGrad1)" stroke="#a78bfa" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="136" y="463" text-anchor="middle" font-family="monospace" font-size="8" fill="#c4b5fd">Products</text>
+  <rect x="183" y="446" width="72" height="26" rx="4" fill="url(#appGrad1)" stroke="#a78bfa" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="219" y="463" text-anchor="middle" font-family="monospace" font-size="8" fill="#c4b5fd">Orders</text>
+  <rect x="266" y="446" width="72" height="26" rx="4" fill="url(#appGrad1)" stroke="#a78bfa" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="302" y="463" text-anchor="middle" font-family="monospace" font-size="8" fill="#c4b5fd">Shops</text>
+
+  <!-- ShopZone DB -->
+  <ellipse cx="220" cy="500" rx="50" ry="10" fill="url(#appGrad1)" stroke="#a78bfa" stroke-opacity="0.3" stroke-width="1"/>
+  <rect x="170" y="500" width="100" height="30" fill="url(#appGrad1)" stroke="#a78bfa" stroke-opacity="0.2" stroke-width="1"/>
+  <ellipse cx="220" cy="530" rx="50" ry="10" fill="url(#appGrad1)" stroke="#a78bfa" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="220" y="519" text-anchor="middle" font-family="monospace" font-size="8" fill="#c4b5fd" opacity="0.8">roles + perms</text>
+
+  <!-- App 2: CoachUp (center) -->
+  <rect x="420" y="380" width="280" height="170" rx="12" fill="url(#cardGrad)" stroke="#34d399" stroke-opacity="0.4" stroke-width="1.5"/>
+  <text x="560" y="408" text-anchor="middle" font-family="monospace" font-size="14" font-weight="700" fill="#a7f3d0">CoachUp</text>
+  <text x="560" y="425" text-anchor="middle" font-family="monospace" font-size="9" fill="#34d399" opacity="0.7">coaching platform</text>
+  <line x1="420" y1="434" x2="700" y2="434" stroke="#34d399" stroke-opacity="0.15" stroke-width="1"/>
+
+  <!-- CoachUp microservices -->
+  <rect x="440" y="446" width="72" height="26" rx="4" fill="url(#appGrad2)" stroke="#34d399" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="476" y="463" text-anchor="middle" font-family="monospace" font-size="8" fill="#6ee7b7">Courses</text>
+  <rect x="523" y="446" width="72" height="26" rx="4" fill="url(#appGrad2)" stroke="#34d399" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="559" y="463" text-anchor="middle" font-family="monospace" font-size="8" fill="#6ee7b7">Booking</text>
+  <rect x="606" y="446" width="72" height="26" rx="4" fill="url(#appGrad2)" stroke="#34d399" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="642" y="463" text-anchor="middle" font-family="monospace" font-size="8" fill="#6ee7b7">Payments</text>
+
+  <!-- CoachUp DB -->
+  <ellipse cx="560" cy="500" rx="50" ry="10" fill="url(#appGrad2)" stroke="#34d399" stroke-opacity="0.3" stroke-width="1"/>
+  <rect x="510" y="500" width="100" height="30" fill="url(#appGrad2)" stroke="#34d399" stroke-opacity="0.2" stroke-width="1"/>
+  <ellipse cx="560" cy="530" rx="50" ry="10" fill="url(#appGrad2)" stroke="#34d399" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="560" y="519" text-anchor="middle" font-family="monospace" font-size="8" fill="#6ee7b7" opacity="0.8">roles + perms</text>
+
+  <!-- App 3: StreamLive (right) -->
+  <rect x="760" y="380" width="280" height="170" rx="12" fill="url(#cardGrad)" stroke="#fbbf24" stroke-opacity="0.4" stroke-width="1.5"/>
+  <text x="900" y="408" text-anchor="middle" font-family="monospace" font-size="14" font-weight="700" fill="#fde68a">StreamLive</text>
+  <text x="900" y="425" text-anchor="middle" font-family="monospace" font-size="9" fill="#fbbf24" opacity="0.7">live streaming</text>
+  <line x1="760" y1="434" x2="1040" y2="434" stroke="#fbbf24" stroke-opacity="0.15" stroke-width="1"/>
+
+  <!-- StreamLive microservices -->
+  <rect x="780" y="446" width="72" height="26" rx="4" fill="url(#appGrad3)" stroke="#fbbf24" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="816" y="463" text-anchor="middle" font-family="monospace" font-size="8" fill="#fde68a">Streams</text>
+  <rect x="863" y="446" width="72" height="26" rx="4" fill="url(#appGrad3)" stroke="#fbbf24" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="899" y="463" text-anchor="middle" font-family="monospace" font-size="8" fill="#fde68a">Chat</text>
+  <rect x="946" y="446" width="72" height="26" rx="4" fill="url(#appGrad3)" stroke="#fbbf24" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="982" y="463" text-anchor="middle" font-family="monospace" font-size="8" fill="#fde68a">Donations</text>
+
+  <!-- StreamLive DB -->
+  <ellipse cx="900" cy="500" rx="50" ry="10" fill="url(#appGrad3)" stroke="#fbbf24" stroke-opacity="0.3" stroke-width="1"/>
+  <rect x="850" y="500" width="100" height="30" fill="url(#appGrad3)" stroke="#fbbf24" stroke-opacity="0.2" stroke-width="1"/>
+  <ellipse cx="900" cy="530" rx="50" ry="10" fill="url(#appGrad3)" stroke="#fbbf24" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="900" y="519" text-anchor="middle" font-family="monospace" font-size="8" fill="#fde68a" opacity="0.8">roles + perms</text>
+
+  <!-- ─── Arrows from IdP to Apps ─── -->
+
+  <!-- IdP → ShopZone -->
+  <path d="M 500 310 Q 400 345 300 375" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.6" marker-end="url(#arrowPurple)"/>
+  <text x="380" y="338" text-anchor="middle" font-family="monospace" font-size="8" fill="#a78bfa" opacity="0.7">JWT</text>
+
+  <!-- IdP → CoachUp -->
+  <line x1="600" y1="310" x2="600" y2="375" stroke="#34d399" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.6" marker-end="url(#arrowGreen)"/>
+  <text x="615" y="348" font-family="monospace" font-size="8" fill="#34d399" opacity="0.7">JWT</text>
+
+  <!-- IdP → StreamLive -->
+  <path d="M 700 310 Q 800 345 880 375" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.6" marker-end="url(#arrowAmber)"/>
+  <text x="810" y="338" text-anchor="middle" font-family="monospace" font-size="8" fill="#fbbf24" opacity="0.7">JWT</text>
+
+  <!-- ─── SSO indicator arc ─── -->
+  <path d="M 220 375 Q 220 350 340 340 Q 460 330 560 375" fill="none" stroke="#6366f1" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>
+  <path d="M 560 375 Q 660 330 780 340 Q 900 350 900 375" fill="none" stroke="#6366f1" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>
+  <text x="560" y="358" text-anchor="middle" font-family="monospace" font-size="8" fill="#6366f1" opacity="0.5">SSO via session cookie</text>
+
+  <!-- ─── Bottom tag row ─── -->
+  <rect x="200" y="575" width="800" height="1" rx="0.5" fill="#6366f1" opacity="0.12"/>
+  <text x="600" y="605" text-anchor="middle" font-family="monospace" font-size="12" fill="#6b7280">
+    OAuth 2.0 + OIDC  ·  PKCE  ·  JWT validation  ·  SSO  ·  fine-grained authorization
+  </text>
+</svg>
