@@ -8,6 +8,8 @@ export const TAGS = [
   "pattern",
   "authentication",
   "authorization",
+  "security",
+  "oauth",
 ] as const;
 
 export type Tag = (typeof TAGS)[number];

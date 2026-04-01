@@ -1,0 +1,1074 @@
+---
+title: "Authorization Patterns: RBAC, ABAC, and ReBAC in Practice"
+description: "A deep dive into the three major authorization models — Role-Based, Attribute-Based, and Relationship-Based Access Control — with concrete implementations, real tech stacks, and practical guidance for choosing the right pattern."
+pubDate: 2026-04-02
+tags: ["architecture", "backend", "authorization", "security"]
+image: "/images/authorization-patterns.svg"
+series: "Enterprise Auth"
+seriesOrder: 2
+---
+
+import Callout from "@/components/Callout.astro";
+import MermaidDiagram from "@/components/MermaidDiagram.astro";
+
+In the [previous post](/blog/enterprise-auth-architecture), we established a clear boundary: the Identity Provider handles _authentication_ (who are you?), and each application handles _authorization_ (what can you do?). We left the authorization side intentionally high-level — a database table with a `role` column and a `permissions` array.
+
+This post goes deep on that side. Authorization is not one thing — it is a spectrum of patterns, each with different tradeoffs, and real-world applications often combine multiple patterns in the same system. We will cover the three major models, implement each one against the same scenario, and look at the real tech stacks used in production.
+
+---
+
+## The Scenario (Continued)
+
+We continue with the same three-product organization:
+
+| Product        | Description              | Authorization Challenges                                                |
+| -------------- | ------------------------ | ----------------------------------------------------------------------- |
+| **ShopZone**   | E-commerce marketplace   | Shop owners, collaborators with per-shop permissions, org-level admins  |
+| **CoachUp**    | Online coaching platform | Coaches who own courses, students with enrollment-based access          |
+| **StreamLive** | Live streaming           | Channel owners, per-channel moderators with different permission levels |
+
+The core question every request must answer:
+
+> **Can this user perform this action on this resource?**
+
+Every authorization system, regardless of pattern, ultimately exposes the same interface:
+
+```text title="The universal authorization question"
+can(subject, action, resource) → allow | deny
+
+can("mario",  "edit_product",  "shop:42/product:99")  → ?
+can("sara",   "ban_user",      "channel:7")            → ?
+can("luigi",  "view_grades",   "course:15")            → ?
+```
+
+The difference between RBAC, ABAC, and ReBAC is **how they resolve that question internally**. But before diving into the three patterns, there is a fundamental distinction you need to understand: the difference between **coarse-grained** and **fine-grained** authorization.
+
+---
+
+## Coarse-Grained vs. Fine-Grained Authorization
+
+These two terms describe **how specific the authorization decision is** — whether it considers only the user's identity/role, or also the specific resource being accessed and the context of the request.
+
+### Coarse-grained authorization
+
+A coarse-grained check depends only on **who the user is**. It does not consider which specific resource is being accessed. The answer is the same regardless of the target.
+
+Take ShopZone as an example. Mario has the role `seller`:
+
+```text title="Coarse-grained: same answer for every resource"
+Can Mario create products?                     → ✅ (he is a seller)
+Can Mario create products on shop:42?          → ✅ (he is a seller)
+Can Mario create products on shop:99?          → ✅ (he is a seller)
+Can Mario create products on ANY shop?         → ✅ (he is a seller)
+```
+
+The check never asked _which shop_. Mario is a seller, sellers can create products, done. This is coarse-grained — the decision is based entirely on the user's role, applied uniformly across all resources of that type.
+
+Coarse-grained authorization is useful as a **first filter**: if you are not a seller at all, you should not even be attempting to create products. But it cannot express the idea that Mario should only manage _his own_ shop.
+
+### Fine-grained authorization
+
+A fine-grained check depends on **who the user is**, **which specific resource** they are acting on, and potentially **the context** of the request. The answer changes depending on the target.
+
+Same scenario, but now ShopZone tracks shop membership. Mario is a collaborator on shop:42 but has no relationship with shop:99:
+
+```text title="Fine-grained: answer depends on the specific resource"
+Can Mario create products on shop:42?          → ✅ (he is a collaborator on this shop)
+Can Mario create products on shop:99?          → ❌ (he has no relationship with this shop)
+Can Mario create products on shop:42 at 3 AM?  → ❌ (shop policy restricts edits to business hours)
+```
+
+The decision required knowing _which shop_ and potentially _when_. This is fine-grained — the same user, the same action, but different outcomes depending on the target resource and context.
+
+### A concrete side-by-side comparison
+
+Let us look at the same four requests under both models on ShopZone:
+
+| Request                                    | Coarse-Grained (RBAC)    | Fine-Grained (ABAC/ReBAC)                             |
+| ------------------------------------------ | ------------------------ | ----------------------------------------------------- |
+| Mario edits product on his own shop        | ✅ Mario is `seller`     | ✅ Mario is `collaborator` on this shop               |
+| Mario edits product on someone else's shop | ✅ Mario is `seller` (!) | ❌ Mario has no relationship with this shop           |
+| Sara (buyer) edits a product               | ❌ Sara is `buyer`       | ❌ Sara is `buyer` (rejected at coarse-grained layer) |
+| Mario edits product at 3 AM                | ✅ Mario is `seller`     | ❌ Shop policy restricts to business hours            |
+
+The second row is the critical difference. Coarse-grained authorization **cannot distinguish** between Mario's own shop and someone else's — it sees a `seller` and allows the action on all shops. Fine-grained authorization considers the relationship between Mario and the specific shop.
+
+<Callout type="tip" title="They are not mutually exclusive">
+  In practice, you almost always use both. Coarse-grained checks (RBAC) act as a
+  fast first layer — rejecting obviously unauthorized requests before the system
+  spends time evaluating fine-grained rules. A buyer trying to create a product
+  gets rejected instantly at the role check, without ever querying shop
+  membership. Fine-grained checks (ABAC/ReBAC) run only for users who pass the
+  coarse filter.
+</Callout>
+
+### How this maps to the three patterns
+
+| Pattern   | Granularity    | What it evaluates                                                                             |
+| --------- | -------------- | --------------------------------------------------------------------------------------------- |
+| **RBAC**  | Coarse-grained | The user's role → static set of permissions                                                   |
+| **ABAC**  | Fine-grained   | Attributes of the user, the resource, and the context → dynamic policy evaluation             |
+| **ReBAC** | Fine-grained   | Relationships between the user and the resource in a graph → path-based permission resolution |
+
+With this distinction clear, let us look at each pattern in detail.
+
+---
+
+## Pattern 1: RBAC — Role-Based Access Control
+
+### The Concept
+
+RBAC is the simplest and most widely used authorization model. The idea: you assign **roles** to users, and each role carries a set of **permissions**. When a user tries to do something, you check whether their role includes the required permission.
+
+<MermaidDiagram
+  code={`
+flowchart LR
+    U["User: Mario"] --> R["Role: seller"]
+    R --> P1["products:create"]
+    R --> P2["products:edit"]
+    R --> P3["orders:view"]
+    R --> P4["orders:manage"]
+`}
+/>
+
+The permission check is a simple lookup:
+
+```text
+1. What role does the user have?          → seller
+2. Does that role include products:create? → yes
+3. Authorized ✅
+```
+
+### The Permission Naming Convention
+
+Before implementing, let us establish how to name permissions. The most common convention is `resource:action`:
+
+```text title="Permission naming: resource:action"
+products:create     — create a new product
+products:read       — view product details
+products:edit       — modify an existing product
+products:delete     — remove a product
+
+orders:view         — view order list and details
+orders:manage       — update order status, issue refunds
+
+users:invite        — invite new users
+users:ban           — ban a user from the platform
+```
+
+Some systems use a three-part format `resource:action:scope` for more granularity:
+
+```text title="Extended format: resource:action:scope"
+products:read:own       — read only your own products
+products:read:all       — read all products
+orders:manage:own       — manage only your own orders
+orders:manage:all       — manage all orders
+```
+
+<Callout type="tip" title="Convention, not standard">
+  There is no formal standard for permission strings. The `resource:action`
+  format is a widely adopted convention. What matters is consistency across your
+  application. Pick a format and stick with it.
+</Callout>
+
+### Implementation: ShopZone with RBAC
+
+In the simplest form, RBAC is just two database tables:
+
+```sql title="ShopZone — RBAC schema"
+CREATE TABLE roles (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT UNIQUE NOT NULL,      -- 'buyer', 'seller', 'admin'
+    permissions TEXT[] NOT NULL             -- {'products:create', 'products:edit', ...}
+);
+
+CREATE TABLE users (
+    id          SERIAL PRIMARY KEY,
+    idp_sub     UUID UNIQUE NOT NULL,
+    email       TEXT NOT NULL,
+    role_id     INT REFERENCES roles(id)
+);
+```
+
+```sql title="Seed data"
+INSERT INTO roles (name, permissions) VALUES
+    ('buyer',  '{"products:read", "orders:create", "orders:view_own"}'),
+    ('seller', '{"products:read", "products:create", "products:edit", "products:delete", "orders:view", "orders:manage"}'),
+    ('admin',  '{"products:read", "products:create", "products:edit", "products:delete", "orders:view", "orders:manage", "users:invite", "users:ban"}');
+```
+
+The authorization check in your API:
+
+```typescript title="src/middleware/authorize.ts"
+function authorize(requiredPermission: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const userId = req.auth.sub; // from JWT validation middleware
+
+    // In production: cache this in Redis
+    const user = await db.query(
+      `
+      SELECT r.permissions
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+      WHERE u.idp_sub = $1
+    `,
+      [userId],
+    );
+
+    if (!user.rows[0]) {
+      return res.status(403).json({ error: "User not found" });
+    }
+
+    const permissions: string[] = user.rows[0].permissions;
+
+    if (!permissions.includes(requiredPermission)) {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+
+    next();
+  };
+}
+
+// Usage in routes
+app.post("/products", authorize("products:create"), createProductHandler);
+app.delete("/products/:id", authorize("products:delete"), deleteProductHandler);
+app.post("/users/ban", authorize("users:ban"), banUserHandler);
+```
+
+### Hierarchical RBAC
+
+A common extension is **role hierarchy**, where higher roles inherit permissions from lower ones:
+
+<MermaidDiagram
+  code={`
+flowchart BT
+    BUYER["buyer<br/>products:read, orders:create"]
+    SELLER["seller<br/>+ products:create, products:edit,<br/>products:delete, orders:manage"]
+    ADMIN["admin<br/>+ users:invite, users:ban,<br/>platform:configure"]
+
+    BUYER --> SELLER
+    SELLER --> ADMIN
+
+`}
+/>
+
+In this model, an `admin` automatically has all `seller` permissions, which include all `buyer` permissions. This avoids duplicating permission lists:
+
+```sql title="Hierarchical RBAC — role inheritance"
+CREATE TABLE roles (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT UNIQUE NOT NULL,
+    parent_id   INT REFERENCES roles(id),   -- inheritance chain
+    own_permissions TEXT[] NOT NULL           -- permissions added at this level
+);
+
+INSERT INTO roles (name, parent_id, own_permissions) VALUES
+    ('buyer',  NULL, '{"products:read", "orders:create", "orders:view_own"}'),
+    ('seller', 1,    '{"products:create", "products:edit", "products:delete", "orders:view", "orders:manage"}'),
+    ('admin',  2,    '{"users:invite", "users:ban", "platform:configure"}');
+```
+
+To resolve permissions, you walk up the inheritance chain and merge:
+
+```typescript title="Resolve effective permissions with inheritance"
+async function getEffectivePermissions(roleId: number): Promise<string[]> {
+  const permissions: string[] = [];
+  let currentRoleId: number | null = roleId;
+
+  while (currentRoleId !== null) {
+    const role = await db.query(
+      "SELECT own_permissions, parent_id FROM roles WHERE id = $1",
+      [currentRoleId],
+    );
+    permissions.push(...role.rows[0].own_permissions);
+    currentRoleId = role.rows[0].parent_id;
+  }
+
+  return permissions;
+}
+```
+
+### When RBAC Works
+
+RBAC is the right choice when:
+
+- Permissions depend only on **who the user is**, not on which specific resource they are accessing
+- You have a small, well-defined set of roles (< 10)
+- There is no need for per-resource permissions (e.g., "editor of _this specific_ document")
+
+### When RBAC Breaks Down
+
+Consider this ShopZone scenario:
+
+> Luigi owns shop "Luigi's Pizza". Sara is a collaborator on that shop with permission to add products. Marco is a collaborator on a _different_ shop.
+
+RBAC cannot express this. If Sara has the role `seller`, she can add products to **all** shops, not just Luigi's. There is no way to scope a role to a specific resource. You would need a role per shop (`seller_shop_42`, `seller_shop_43`...) which does not scale.
+
+This is where ABAC takes over.
+
+---
+
+## Pattern 2: ABAC — Attribute-Based Access Control
+
+### The Concept
+
+ABAC makes authorization decisions based on **attributes** of the subject, the resource, the action, and the environment. Instead of a static role-to-permission mapping, you write **policies** — rules that evaluate attributes at decision time.
+
+<MermaidDiagram
+  code={`
+flowchart LR
+    REQ["Authorization Request"] --> PE["Policy Engine"]
+
+    SA["Subject Attributes<br/>role: seller<br/>user_id: 15<br/>plan: premium"] --> PE
+    RA["Resource Attributes<br/>type: shop<br/>shop_id: 42<br/>status: active"] --> PE
+    AA["Action Attributes<br/>action: add_product"] --> PE
+    EA["Environment Attributes<br/>time: 14:00 UTC<br/>ip: 10.0.0.x"] --> PE
+
+    PE --> D{"allow | deny"}
+
+`}
+/>
+
+A policy might read:
+
+```text title="ABAC policy (pseudocode)"
+ALLOW add_product ON shop
+  WHEN subject.role == "seller"
+    AND subject.id IN resource.shop.members
+    AND resource.shop.status == "active"
+```
+
+The key difference from RBAC: the decision depends on **the relationship between the user and the specific resource**, not just the user's global role.
+
+### The `shop_members` Table Is ABAC
+
+In the previous post, we designed this schema for ShopZone:
+
+```sql title="ShopZone — shop_members (this is ABAC)"
+CREATE TABLE shop_members (
+    shop_id     INT REFERENCES shops(id),
+    user_id     INT REFERENCES users(id),
+    permissions TEXT[] NOT NULL,
+    PRIMARY KEY (shop_id, user_id)
+);
+```
+
+This is ABAC in practice: the permission check depends on the attributes of the user (`user_id`), the resource (`shop_id`), and the specific permissions granted on that relationship. You just did not call it ABAC before.
+
+### Implementation: ShopZone with a Policy Engine
+
+While you can implement ABAC with plain SQL queries (as we did in the previous post), as policies grow complex, a **policy engine** brings structure. Let us look at two production-grade options.
+
+#### Option A: Open Policy Agent (OPA)
+
+OPA is the most widely adopted general-purpose policy engine. Used by Netflix, Pinterest, Atlassian, and many others. Policies are written in **Rego**, a purpose-built declarative language.
+
+```rego title="policy/shopzone.rego"
+package shopzone.authz
+
+import rego.v1
+
+default allow := false
+
+# Buyers can read any product
+allow if {
+    input.action == "products:read"
+    input.subject.role == "buyer"
+}
+
+# Shop owners can do anything on their shop
+allow if {
+    input.resource.type == "shop"
+    input.resource.owner_id == input.subject.user_id
+}
+
+# Shop members can perform their granted permissions
+allow if {
+    input.resource.type == "shop"
+    membership := data.shop_members[input.resource.shop_id][input.subject.user_id]
+    input.action in membership.permissions
+}
+
+# Sellers can manage products on shops where they have add_products permission
+allow if {
+    input.action == "products:create"
+    membership := data.shop_members[input.resource.shop_id][input.subject.user_id]
+    "add_products" in membership.permissions
+}
+```
+
+OPA runs as a **sidecar** or a **daemon** next to your service. Your API sends a JSON request and gets back `allow` or `deny`:
+
+```typescript title="src/middleware/opa-authorize.ts"
+async function opaAuthorize(action: string, resource: object) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const response = await fetch(
+      "http://localhost:8181/v1/data/shopzone/authz/allow",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: {
+            subject: {
+              user_id: req.user.id, // from JWT + local user lookup
+              role: req.user.role,
+            },
+            action,
+            resource,
+          },
+        }),
+      },
+    );
+
+    const { result } = await response.json();
+
+    if (!result) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    next();
+  };
+}
+
+// Usage
+app.post(
+  "/shops/:shopId/products",
+  opaAuthorize("products:create", { type: "shop", shop_id: req.params.shopId }),
+  createProductHandler,
+);
+```
+
+<Callout type="note" title="How OPA gets the data">
+  In the Rego policy above, `data.shop_members` refers to data that OPA has in
+  memory. You load this data into OPA either by **pushing** it (your service
+  sends updates to OPA's data API when permissions change) or by **bundling** it
+  (OPA periodically pulls a data bundle from a server). For frequently changing
+  data, pushing is more responsive.
+</Callout>
+
+#### Option B: Cerbos
+
+Cerbos is purpose-built for application authorization (unlike OPA which is general-purpose). Policies are written in YAML, which is more approachable than Rego for most teams:
+
+```yaml title="policies/shop_resource.yaml"
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "shop"
+  version: "1.0"
+  rules:
+    - actions: ["*"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]
+
+    - actions: ["products:read"]
+      effect: EFFECT_ALLOW
+      roles: ["buyer", "seller"]
+
+    - actions: ["products:create", "products:edit"]
+      effect: EFFECT_ALLOW
+      roles: ["seller"]
+      condition:
+        match:
+          expr: >
+            request.resource.attr.members.filter(m,
+              m.user_id == request.principal.id
+              && m.permissions.exists(p, p == request.action)
+            ).size() > 0
+
+    - actions: ["shop:delete"]
+      effect: EFFECT_ALLOW
+      roles: ["seller"]
+      condition:
+        match:
+          expr: "request.resource.attr.owner_id == request.principal.id"
+```
+
+The API call to Cerbos:
+
+```typescript title="src/middleware/cerbos-authorize.ts"
+import { Cerbos } from "@cerbos/http";
+
+const cerbos = new Cerbos("http://localhost:3592");
+
+async function cerbosAuthorize(action: string, resourceKind: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const result = await cerbos.checkResource({
+      principal: {
+        id: String(req.user.id),
+        roles: [req.user.role],
+      },
+      resource: {
+        kind: resourceKind,
+        id: req.params.shopId,
+        attr: {
+          owner_id: shop.owner_id, // fetched from DB
+          members: shop.members, // fetched from DB
+        },
+      },
+      actions: [action],
+    });
+
+    if (!result.isAllowed(action)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    next();
+  };
+}
+```
+
+### OPA vs Cerbos: When to Use Which
+
+| Aspect              | OPA                                                                         | Cerbos                                                |
+| ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **Policy language** | Rego (custom language, steep learning curve)                                | YAML (familiar to most engineers)                     |
+| **Scope**           | General-purpose (works for K8s admission, API auth, infrastructure)         | Purpose-built for application authorization           |
+| **Data model**      | You push data into OPA and policies query it                                | You pass resource attributes with each request        |
+| **Performance**     | Sub-millisecond (data in memory)                                            | Sub-millisecond (policies evaluated locally)          |
+| **Best for**        | Organizations that need a single policy engine across infrastructure + apps | Teams that want fast, focused app-level authorization |
+| **Used by**         | Netflix, Pinterest, Atlassian, Styra                                        | Cerbos Cloud customers, startups to mid-size          |
+
+<Callout type="tip" title="You do not need a policy engine on day one">
+  For most applications, the `shop_members` table with a SQL query is perfectly
+  fine ABAC. Introduce OPA or Cerbos when: (1) you have more than ~10
+  authorization rules, (2) you want to decouple policy from code, (3) you need
+  audit trails for policy changes, or (4) multiple services need to evaluate the
+  same policies.
+</Callout>
+
+### When ABAC Works
+
+ABAC is the right choice when:
+
+- Permissions depend on **which specific resource** the user is accessing
+- You need **contextual rules** (time-based access, IP restrictions, resource status)
+- Your authorization logic is complex enough that inline `if` statements become unmanageable
+- You want to **decouple policy from application code** (policy-as-code, auditable changes)
+
+### When ABAC Breaks Down
+
+Consider this StreamLive scenario:
+
+> StreamLive introduces **organizations**. A streamer can create an org, add channels to it, and assign org-level admins. Org admins should automatically have moderator permissions on _all_ channels in the org, including channels added in the future.
+
+With ABAC, you would need to:
+
+1. Query the channel to find its parent org
+2. Query the org to find its admins
+3. Check if the user is an org admin
+4. If yes, grant moderator permissions
+
+This works, but as hierarchies deepen (org → team → channel → sub-channel), the number of queries grows, and the policy logic becomes increasingly tangled. You are essentially traversing a graph of relationships — which is exactly what ReBAC was designed for.
+
+---
+
+## Pattern 3: ReBAC — Relationship-Based Access Control
+
+### The Concept
+
+ReBAC, formalized by Google's **Zanzibar** paper (2019), models authorization as a **graph of relationships between entities**. Instead of asking "does this user have this permission?", you ask "does a path exist in the relationship graph that grants this permission?"
+
+Everything is stored as **relationship tuples**:
+
+```text title="Relationship tuples: (subject, relation, resource)"
+(luigi,    owner,        shop:42)
+(sara,     collaborator, shop:42)
+(shop:42,  part_of,      org:luigis-food)
+(luigi,    admin,        org:luigis-food)
+(marco,    admin,        org:luigis-food)
+```
+
+Permissions are derived from the relationships through a **schema** that defines which relations grant which permissions, and how permissions inherit across relationships:
+
+<MermaidDiagram
+  code={`
+flowchart TB
+    subgraph ORG["org:luigis-food"]
+        LUIGI_ADMIN["luigi → admin"]
+        MARCO_ADMIN["marco → admin"]
+    end
+
+    subgraph SHOP1["shop:42 (Luigi's Pizza)"]
+        LUIGI_OWNER["luigi → owner"]
+        SARA_COLLAB["sara → collaborator"]
+    end
+
+    subgraph SHOP2["shop:88 (Luigi's Pasta)"]
+        LUIGI_OWNER2["luigi → owner"]
+    end
+
+    ORG -- "part_of" --> SHOP1
+    ORG -- "part_of" --> SHOP2
+
+    style ORG fill:#1e1b4b,stroke:#818cf8,stroke-width:1.5px,color:#c7d2fe
+    style SHOP1 fill:#1e1b2e,stroke:#a78bfa,stroke-width:1.5px,color:#ddd6fe
+    style SHOP2 fill:#1e1b2e,stroke:#a78bfa,stroke-width:1.5px,color:#ddd6fe
+
+`}
+/>
+
+When you ask: _"Can Marco delete a product on shop:42?"_
+
+The system traverses the graph:
+
+```text
+marco → admin of org:luigis-food
+org:luigis-food → parent of shop:42
+admin on parent org → inherits all permissions on child shops
+→ ✅ Marco can delete products on shop:42
+```
+
+Marco was never explicitly granted any permission on shop:42. His access is **inherited** through the organizational hierarchy — and this works automatically for any new shop added to the org in the future.
+
+### Implementation: SpiceDB
+
+SpiceDB (by AuthZed) is the most complete open-source implementation of Zanzibar. You define a **schema** that describes your object types, their relations, and how permissions are computed:
+
+```text title="schema.zed — SpiceDB schema for ShopZone"
+definition user {}
+
+definition organization {
+    relation admin: user
+    relation member: user
+
+    permission manage = admin
+    permission view = admin + member
+}
+
+definition shop {
+    relation owner: user
+    relation collaborator: user
+    relation parent_org: organization
+
+    // Direct permissions
+    permission delete = owner
+    permission manage = owner + collaborator + parent_org->admin
+    permission add_product = owner + collaborator + parent_org->admin
+    permission edit_product = owner + collaborator + parent_org->admin
+    permission view = owner + collaborator + parent_org->member
+}
+
+definition product {
+    relation shop: shop
+
+    permission edit = shop->edit_product
+    permission delete = shop->manage
+    permission view = shop->view
+}
+```
+
+The critical line is `parent_org->admin`: this means "anyone who is an admin on the parent org also has this permission." This is how permission inheritance works — no manual propagation needed.
+
+#### Writing relationships
+
+When Luigi creates a shop and adds Sara as collaborator:
+
+```bash title="Writing relationship tuples to SpiceDB"
+# Luigi owns shop:42
+zed relationship create shop:42 owner user:luigi
+
+# Sara is a collaborator on shop:42
+zed relationship create shop:42 collaborator user:sara
+
+# Shop:42 belongs to org:luigis-food
+zed relationship create shop:42 parent_org organization:luigis-food
+
+# Luigi is admin of the org
+zed relationship create organization:luigis-food admin user:luigi
+
+# Marco is also an org admin
+zed relationship create organization:luigis-food admin user:marco
+```
+
+#### Checking permissions
+
+```bash title="Permission checks against SpiceDB"
+# Can Sara add a product to shop:42?
+zed permission check shop:42 add_product user:sara
+# ✅ sara is a collaborator on shop:42
+
+# Can Marco add a product to shop:42?
+zed permission check shop:42 add_product user:marco
+# ✅ marco is admin of org:luigis-food, which is parent_org of shop:42
+
+# Can Marco add a product to shop:88 (Luigi's Pasta)?
+zed permission check shop:88 add_product user:marco
+# ✅ same org inheritance applies
+
+# Can Sara add a product to shop:88?
+zed permission check shop:88 add_product user:sara
+# ❌ sara is only a collaborator on shop:42, not shop:88
+```
+
+#### Integration with your API
+
+```typescript title="src/middleware/spicedb-authorize.ts"
+import { v1 } from "@authzed/authzed-node";
+
+const client = v1.NewClient("your-spicedb-token");
+
+async function spicedbAuthorize(
+  permission: string,
+  resourceType: string,
+  resourceIdParam: string,
+) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const resourceId = req.params[resourceIdParam];
+
+    const result = await client.checkPermission({
+      resource: {
+        objectType: resourceType,
+        objectId: resourceId,
+      },
+      permission,
+      subject: {
+        object: {
+          objectType: "user",
+          objectId: String(req.user.id),
+        },
+      },
+    });
+
+    if (
+      result.permissionship !==
+      v1.CheckPermissionResponse_Permissionship.HAS_PERMISSION
+    ) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    next();
+  };
+}
+
+// Usage
+app.post(
+  "/shops/:shopId/products",
+  spicedbAuthorize("add_product", "shop", "shopId"),
+  createProductHandler,
+);
+
+app.delete(
+  "/shops/:shopId",
+  spicedbAuthorize("delete", "shop", "shopId"),
+  deleteShopHandler,
+);
+```
+
+### Implementation: OpenFGA
+
+OpenFGA (by Okta/Auth0) is another Zanzibar implementation with a different API style. The model is defined in JSON:
+
+```json title="model.json — OpenFGA authorization model"
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "user"
+    },
+    {
+      "type": "organization",
+      "relations": {
+        "admin": { "this": {} },
+        "member": { "this": {} }
+      },
+      "metadata": {
+        "relations": {
+          "admin": { "directly_related_user_types": [{ "type": "user" }] },
+          "member": { "directly_related_user_types": [{ "type": "user" }] }
+        }
+      }
+    },
+    {
+      "type": "shop",
+      "relations": {
+        "owner": { "this": {} },
+        "collaborator": { "this": {} },
+        "parent_org": { "this": {} }
+      },
+      "metadata": {
+        "relations": {
+          "owner": { "directly_related_user_types": [{ "type": "user" }] },
+          "collaborator": {
+            "directly_related_user_types": [{ "type": "user" }]
+          },
+          "parent_org": {
+            "directly_related_user_types": [{ "type": "organization" }]
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+```typescript title="src/middleware/openfga-authorize.ts"
+import { OpenFgaClient } from "@openfga/sdk";
+
+const fga = new OpenFgaClient({
+  apiUrl: "http://localhost:8080",
+  storeId: "your-store-id",
+});
+
+// Write a relationship
+await fga.write({
+  writes: [{ user: "user:sara", relation: "collaborator", object: "shop:42" }],
+});
+
+// Check a permission
+const { allowed } = await fga.check({
+  user: "user:sara",
+  relation: "add_product",
+  object: "shop:42",
+});
+```
+
+### SpiceDB vs OpenFGA
+
+| Aspect                | SpiceDB                                       | OpenFGA                                    |
+| --------------------- | --------------------------------------------- | ------------------------------------------ |
+| **Schema language**   | Zed (custom, readable)                        | JSON (verbose but tooling-friendly)        |
+| **Consistency**       | Strongly consistent (ZedTokens)               | Eventually consistent by default           |
+| **Managed option**    | Authzed (cloud)                               | Okta FGA (cloud)                           |
+| **API**               | gRPC-first                                    | HTTP/gRPC                                  |
+| **Best for**          | Teams that need strong consistency guarantees | Auth0/Okta users, HTTP-first architectures |
+| **Watch / subscribe** | Yes                                           | Yes                                        |
+
+<Callout type="warning" title="Consistency matters in ReBAC">
+  When Luigi removes Sara as a collaborator, the relationship tuple is deleted.
+  But if your system is eventually consistent, there is a brief window where a
+  check might still return "allowed." SpiceDB solves this with **ZedTokens** — a
+  token returned on every write that you pass to subsequent checks to guarantee
+  they see the latest state. If your security requirements demand immediate
+  revocation, choose a solution with strong consistency guarantees.
+</Callout>
+
+### When ReBAC Works
+
+ReBAC is the right choice when:
+
+- Permissions depend on **relationships between entities** (ownership, membership, hierarchy)
+- You have **resource hierarchies** with permission inheritance (org → team → project → document)
+- Users can be granted access to **specific resources**, not just global capabilities
+- You need to answer questions like "list all shops that Sara can edit" efficiently (reverse lookups)
+
+### When ReBAC Is Overkill
+
+If your authorization model is:
+
+- A flat set of roles with global permissions → RBAC
+- Per-resource rules without hierarchies or inheritance → ABAC with a simple DB query
+- A handful of resources with simple ownership → `WHERE owner_id = ?` in SQL
+
+Do not introduce SpiceDB for problems that a `WHERE` clause solves.
+
+---
+
+## Combining Patterns: How Real Applications Work
+
+Real-world applications rarely use a single pattern. They layer them:
+
+<MermaidDiagram
+  code={`
+flowchart TD
+    REQ["Incoming Request"] --> JWT["Layer 1: JWT Validation<br/>(Authentication)"]
+    JWT -- "401 if invalid" --> REJECT1["401 Unauthorized"]
+    JWT -- "valid" --> RBAC["Layer 2: RBAC<br/>Coarse-grained role check"]
+    RBAC -- "403 if no role" --> REJECT2["403 Forbidden"]
+    RBAC -- "has role" --> FINE["Layer 3: Fine-grained check<br/>ABAC or ReBAC"]
+    FINE -- "403 if denied" --> REJECT3["403 Forbidden"]
+    FINE -- "allowed" --> EXEC["Execute request"]
+`}
+/>
+
+### Example: ShopZone layered authorization
+
+```typescript title="src/routes/products.ts — layered authorization"
+app.post(
+  "/shops/:shopId/products",
+
+  // Layer 1: Authentication (JWT validation middleware)
+  // Rejects with 401 if token is invalid, expired, or missing
+  authenticateJWT,
+
+  // Layer 2: RBAC — coarse-grained check
+  // Only sellers and admins can even attempt to create products
+  requireRole(["seller", "admin"]),
+
+  // Layer 3: Fine-grained — resource-level check
+  // Is this user a member of this specific shop with add_product permission?
+  checkShopPermission("add_product"),
+
+  // Handler — only reached if all three layers pass
+  createProductHandler,
+);
+```
+
+Why layer? **Performance and clarity.**
+
+- The RBAC check is a single in-memory comparison (the role is cached from the DB or embedded in the user context). It rejects most unauthorized requests instantly, before hitting the database or the policy engine.
+- The fine-grained check only runs for users who _might_ be authorized, reducing expensive lookups.
+
+### Concrete example across all three apps
+
+| App            | Layer 2 (RBAC)                 | Layer 3 (Fine-grained)                                                              | Tech                                             |
+| -------------- | ------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **ShopZone**   | `seller` can manage products   | But only on shops where they are `owner` or `collaborator`                          | ABAC via SQL, or ReBAC via SpiceDB if orgs exist |
+| **CoachUp**    | `coach` can manage courses     | But only courses they created; `student` can view only courses they are enrolled in | ABAC via SQL (`enrollments` table)               |
+| **StreamLive** | `streamer` can manage channels | Moderator permissions are per-channel; org admins inherit across channels           | ReBAC via SpiceDB                                |
+
+---
+
+## Where to Enforce Authorization
+
+Authorization checks can live in different places in your architecture. Each has tradeoffs:
+
+### Option 1: In the API handler (most common)
+
+```typescript title="Authorization in the handler"
+async function createProduct(req: Request, res: Response) {
+  const canCreate = await checkPermission(
+    req.user.id,
+    "add_product",
+    `shop:${req.params.shopId}`,
+  );
+  if (!canCreate) return res.status(403).json({ error: "Forbidden" });
+
+  // ... create product
+}
+```
+
+Simple, explicit, easy to test. But authorization logic is scattered across handlers.
+
+### Option 2: In middleware (recommended for most apps)
+
+```typescript title="Authorization as middleware"
+app.post(
+  "/shops/:shopId/products",
+  authenticate,
+  authorize("add_product", "shop"), // reusable middleware
+  createProductHandler, // handler has no auth logic
+);
+```
+
+Centralized, reusable, handlers stay focused on business logic.
+
+### Option 3: As a sidecar (OPA, Cerbos)
+
+<MermaidDiagram
+  code={`
+flowchart LR
+    CLIENT["Client"] --> GW["API Gateway"]
+    GW --> SVC["Your Service"]
+    SVC -- "policy check" --> SIDECAR["OPA / Cerbos<br/>(sidecar, localhost)"]
+    SIDECAR -- "allow/deny" --> SVC
+`}
+/>
+
+The policy engine runs as a separate process (sidecar in Kubernetes, or a local daemon). Your service calls it over localhost. Policies are decoupled from your codebase — they can be versioned, reviewed, and deployed independently.
+
+### Option 4: At the API Gateway (coarse-grained only)
+
+The API gateway (Kong, Envoy, AWS API Gateway) can enforce RBAC checks before traffic reaches your services. This works for coarse-grained checks like "only authenticated users can access `/api/*`" but cannot handle resource-level decisions (the gateway does not know about your `shop_members` table).
+
+<Callout type="danger" title="Never rely solely on gateway-level authorization">
+  API gateway checks are useful as a first line of defense, but they MUST be
+  complemented by service-level checks. Gateways cannot evaluate fine-grained
+  permissions because they lack the application context. If you skip
+  service-level checks, any internal service-to-service call bypasses
+  authorization entirely.
+</Callout>
+
+---
+
+## The Complete Picture: Authorization Decision Flow
+
+Putting it all together, here is how a request flows through the full stack from browser to authorized execution:
+
+<MermaidDiagram
+  code={`
+sequenceDiagram
+    participant Browser
+    participant API as API Service
+    participant Cache as Redis Cache
+    participant AuthZ as AuthZ Engine<br/>(OPA / SpiceDB / DB)
+    participant DB as Application DB
+
+    Browser->>API: POST /shops/42/products<br/>+ Bearer JWT
+
+    Note over API: Layer 1: Validate JWT locally<br/>(crypto only, 0 network calls)
+    API->>API: Verify signature + expiry ✅
+
+    Note over API: Layer 2: Identify user
+    API->>Cache: GET user:{sub}
+    Cache-->>API: user_id=15, role=seller
+
+    Note over API: Layer 3: RBAC check
+    API->>API: role "seller" can attempt<br/>products:create? ✅
+
+    Note over API: Layer 4: Fine-grained check
+    API->>Cache: GET perms:15:shop:42
+    alt Cache HIT
+        Cache-->>API: [add_products, edit_products]
+    else Cache MISS
+        API->>AuthZ: can(user:15, add_product, shop:42)?
+        AuthZ->>DB: lookup relationships/attributes
+        DB-->>AuthZ: membership data
+        AuthZ-->>API: ALLOW
+        API->>Cache: SET perms:15:shop:42 TTL 5m
+    end
+
+    Note over API: All checks passed
+    API->>DB: INSERT product
+    API-->>Browser: 201 Created
+
+`}
+/>
+
+---
+
+## Choosing the Right Pattern
+
+Use this decision guide based on the questions your authorization model needs to answer:
+
+<MermaidDiagram
+  code={`
+flowchart TD
+    START["What determines access?"] --> Q1{"Does it depend on<br/>which SPECIFIC resource?"}
+    Q1 -- "No — same rules<br/>for all resources" --> RBAC["Use RBAC<br/><br/>roles table + permissions array<br/>Simple, fast, well-understood"]
+    Q1 -- "Yes — per-resource<br/>permissions" --> Q2{"Do resources form<br/>a HIERARCHY?"}
+    Q2 -- "No — flat resources" --> ABAC["Use ABAC<br/><br/>SQL queries or OPA/Cerbos<br/>Attribute-based policies"]
+    Q2 -- "Yes — orgs, teams,<br/>nested resources" --> Q3{"Do permissions need to<br/>INHERIT across the hierarchy?"}
+    Q3 -- "No — each level<br/>is independent" --> ABAC
+    Q3 -- "Yes — parent permissions<br/>flow to children" --> REBAC["Use ReBAC<br/><br/>SpiceDB or OpenFGA<br/>Relationship graph + inheritance"]
+
+    style RBAC fill:#1e1b4b,stroke:#818cf8,color:#c7d2fe
+    style ABAC fill:#064e3b,stroke:#34d399,color:#a7f3d0
+    style REBAC fill:#78350f,stroke:#fbbf24,color:#fde68a
+
+`}
+/>
+
+### Quick reference
+
+| Question                                          | RBAC                        | ABAC                            | ReBAC                         |
+| ------------------------------------------------- | --------------------------- | ------------------------------- | ----------------------------- |
+| Can Mario create products?                        | ✅ Check role               | ✅ Check role + attributes      | ✅ Check relationships        |
+| Can Mario create products on _shop:42_?           | ❌ Cannot scope to resource | ✅ Check membership attributes  | ✅ Check relationship to shop |
+| Can Mario create products on _any shop in org X_? | ❌                          | ⚠️ Possible but complex queries | ✅ Built-in inheritance       |
+| List all shops Mario can edit                     | ❌                          | ⚠️ Expensive query              | ✅ Native reverse lookup      |
+| Implementation complexity                         | Low                         | Medium                          | High                          |
+| External dependencies                             | None (just SQL)             | Optional (OPA, Cerbos)          | Required (SpiceDB, OpenFGA)   |
+
+---
+
+## Summary
+
+Authorization is not a single problem — it is a spectrum. The three patterns form a natural progression:
+
+**RBAC** answers: _"What is your role?"_ — Simple, global, fast. Use when permissions are uniform across all resources.
+
+**ABAC** answers: _"What are the attributes of you, the resource, and the context?"_ — Flexible, per-resource, policy-driven. Use when different users have different access to specific resources.
+
+**ReBAC** answers: _"What is your relationship to this resource, and what relationships does this resource have?"_ — Graph-based, inheritable, scalable. Use when resources form hierarchies and permissions flow through them.
+
+Most real applications combine them: RBAC as a fast first filter, ABAC or ReBAC for fine-grained decisions, all sitting behind a JWT that proves identity. The Identity Provider handles who you _are_. These patterns handle what you can _do_.

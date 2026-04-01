@@ -1,0 +1,187 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#0e0c14" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b2e"/>
+      <stop offset="100%" stop-color="#16131f"/>
+    </linearGradient>
+    <linearGradient id="rbacGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#312e81" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#1e1b4b" stop-opacity="0.6"/>
+    </linearGradient>
+    <linearGradient id="abacGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#065f46" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#064e3b" stop-opacity="0.6"/>
+    </linearGradient>
+    <linearGradient id="rebacGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#92400e" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#78350f" stop-opacity="0.5"/>
+    </linearGradient>
+    <marker id="arrowIndigo" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#818cf8"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrowAmber" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#fbbf24"/>
+    </marker>
+  </defs>
+
+  <!-- Base -->
+  <rect width="1200" height="630" fill="#0e0c14"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- Dot grid -->
+  <pattern id="dots" x="0" y="0" width="36" height="36" patternUnits="userSpaceOnUse">
+    <circle cx="18" cy="18" r="0.9" fill="#6366f1" opacity="0.1"/>
+  </pattern>
+  <rect width="1200" height="630" fill="url(#dots)"/>
+
+  <!-- ─── Title area ─── -->
+  <text x="600" y="72" text-anchor="middle" font-family="monospace" font-size="12" letter-spacing="5" fill="#6366f1" opacity="0.85">AUTHORIZATION PATTERNS</text>
+  <text x="600" y="126" text-anchor="middle" font-family="system-ui, sans-serif" font-size="50" font-weight="700" fill="#f1f5f9" letter-spacing="-1.5">RBAC · ABAC · ReBAC</text>
+
+  <!-- ─── Central question ─── -->
+  <rect x="410" y="160" width="380" height="44" rx="22" fill="url(#cardGrad)" stroke="#6366f1" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="600" y="187" text-anchor="middle" font-family="monospace" font-size="12" fill="#a5b4fc">can( subject, action, resource ) → ?</text>
+
+  <!-- ─── RBAC Column (left) ─── -->
+  <rect x="60" y="240" width="320" height="290" rx="14" fill="url(#cardGrad)" stroke="#818cf8" stroke-opacity="0.5" stroke-width="1.5"/>
+  <text x="220" y="272" text-anchor="middle" font-family="monospace" font-size="16" font-weight="700" fill="#c7d2fe">RBAC</text>
+  <text x="220" y="292" text-anchor="middle" font-family="monospace" font-size="10" fill="#818cf8" opacity="0.7">Role-Based</text>
+  <line x1="60" y1="304" x2="380" y2="304" stroke="#818cf8" stroke-opacity="0.15" stroke-width="1"/>
+
+  <!-- RBAC diagram: user → role → permissions -->
+  <rect x="100" y="320" width="70" height="32" rx="6" fill="url(#rbacGrad)" stroke="#818cf8" stroke-opacity="0.4" stroke-width="1"/>
+  <text x="135" y="340" text-anchor="middle" font-family="monospace" font-size="9" fill="#a5b4fc">User</text>
+
+  <line x1="170" y1="336" x2="205" y2="336" stroke="#818cf8" stroke-width="1.2" opacity="0.6" marker-end="url(#arrowIndigo)"/>
+
+  <rect x="210" y="320" width="70" height="32" rx="6" fill="url(#rbacGrad)" stroke="#818cf8" stroke-opacity="0.5" stroke-width="1"/>
+  <text x="245" y="340" text-anchor="middle" font-family="monospace" font-size="9" fill="#c7d2fe">Role</text>
+
+  <line x1="280" y1="336" x2="310" y2="322" stroke="#818cf8" stroke-width="1" opacity="0.5" marker-end="url(#arrowIndigo)"/>
+  <line x1="280" y1="336" x2="310" y2="336" stroke="#818cf8" stroke-width="1" opacity="0.5" marker-end="url(#arrowIndigo)"/>
+  <line x1="280" y1="336" x2="310" y2="350" stroke="#818cf8" stroke-width="1" opacity="0.5" marker-end="url(#arrowIndigo)"/>
+
+  <text x="340" y="325" font-family="monospace" font-size="8" fill="#818cf8" opacity="0.7">perm:a</text>
+  <text x="340" y="339" font-family="monospace" font-size="8" fill="#818cf8" opacity="0.7">perm:b</text>
+  <text x="340" y="353" font-family="monospace" font-size="8" fill="#818cf8" opacity="0.7">perm:c</text>
+
+  <!-- RBAC description -->
+  <text x="220" y="390" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">"What is your role?"</text>
+  <text x="220" y="410" text-anchor="middle" font-family="monospace" font-size="8" fill="#64748b">Global permissions</text>
+  <text x="220" y="425" text-anchor="middle" font-family="monospace" font-size="8" fill="#64748b">Simple lookup</text>
+  <text x="220" y="440" text-anchor="middle" font-family="monospace" font-size="8" fill="#64748b">No resource scoping</text>
+
+  <!-- RBAC tech -->
+  <rect x="120" y="460" width="200" height="24" rx="4" fill="#1e1b4b" stroke="#6366f1" stroke-opacity="0.2" stroke-width="1"/>
+  <text x="220" y="476" text-anchor="middle" font-family="monospace" font-size="8" fill="#818cf8">SQL tables · framework built-in</text>
+
+  <!-- Complexity indicator -->
+  <rect x="140" y="498" width="30" height="6" rx="3" fill="#818cf8" opacity="0.7"/>
+  <rect x="175" y="498" width="30" height="6" rx="3" fill="#818cf8" opacity="0.2"/>
+  <rect x="210" y="498" width="30" height="6" rx="3" fill="#818cf8" opacity="0.2"/>
+  <text x="270" y="504" font-family="monospace" font-size="8" fill="#64748b">complexity</text>
+
+  <!-- ─── ABAC Column (center) ─── -->
+  <rect x="420" y="240" width="320" height="290" rx="14" fill="url(#cardGrad)" stroke="#34d399" stroke-opacity="0.5" stroke-width="1.5"/>
+  <text x="580" y="272" text-anchor="middle" font-family="monospace" font-size="16" font-weight="700" fill="#a7f3d0">ABAC</text>
+  <text x="580" y="292" text-anchor="middle" font-family="monospace" font-size="10" fill="#34d399" opacity="0.7">Attribute-Based</text>
+  <line x1="420" y1="304" x2="740" y2="304" stroke="#34d399" stroke-opacity="0.15" stroke-width="1"/>
+
+  <!-- ABAC diagram: attributes → policy engine → decision -->
+  <rect x="448" y="316" width="56" height="22" rx="4" fill="url(#abacGrad)" stroke="#34d399" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="476" y="331" text-anchor="middle" font-family="monospace" font-size="7" fill="#6ee7b7">subject</text>
+  <rect x="448" y="344" width="56" height="22" rx="4" fill="url(#abacGrad)" stroke="#34d399" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="476" y="359" text-anchor="middle" font-family="monospace" font-size="7" fill="#6ee7b7">resource</text>
+  <rect x="448" y="372" width="56" height="22" rx="4" fill="url(#abacGrad)" stroke="#34d399" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="476" y="387" text-anchor="middle" font-family="monospace" font-size="7" fill="#6ee7b7">context</text>
+
+  <line x1="504" y1="327" x2="544" y2="350" stroke="#34d399" stroke-width="1" opacity="0.5" marker-end="url(#arrowGreen)"/>
+  <line x1="504" y1="355" x2="544" y2="355" stroke="#34d399" stroke-width="1" opacity="0.5" marker-end="url(#arrowGreen)"/>
+  <line x1="504" y1="383" x2="544" y2="360" stroke="#34d399" stroke-width="1" opacity="0.5" marker-end="url(#arrowGreen)"/>
+
+  <rect x="550" y="338" width="72" height="32" rx="6" fill="url(#abacGrad)" stroke="#34d399" stroke-opacity="0.5" stroke-width="1"/>
+  <text x="586" y="358" text-anchor="middle" font-family="monospace" font-size="8" fill="#a7f3d0">Policy</text>
+
+  <line x1="622" y1="354" x2="658" y2="354" stroke="#34d399" stroke-width="1.2" opacity="0.6" marker-end="url(#arrowGreen)"/>
+
+  <rect x="664" y="342" width="56" height="24" rx="6" fill="#064e3b" stroke="#34d399" stroke-opacity="0.4" stroke-width="1"/>
+  <text x="692" y="358" text-anchor="middle" font-family="monospace" font-size="8" fill="#6ee7b7">allow?</text>
+
+  <!-- ABAC description -->
+  <text x="580" y="410" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">"What are the attributes?"</text>
+  <text x="580" y="430" text-anchor="middle" font-family="monospace" font-size="8" fill="#64748b">Per-resource decisions</text>
+  <text x="580" y="445" text-anchor="middle" font-family="monospace" font-size="8" fill="#64748b">Contextual rules</text>
+  <text x="580" y="460" text-anchor="middle" font-family="monospace" font-size="8" fill="#64748b">Policy-as-code</text>
+
+  <!-- ABAC tech -->
+  <rect x="460" y="472" width="240" height="24" rx="4" fill="#064e3b" stroke="#34d399" stroke-opacity="0.2" stroke-width="1"/>
+  <text x="580" y="488" text-anchor="middle" font-family="monospace" font-size="8" fill="#34d399">OPA (Rego) · Cerbos (YAML) · Cedar</text>
+
+  <!-- Complexity indicator -->
+  <rect x="500" y="508" width="30" height="6" rx="3" fill="#34d399" opacity="0.7"/>
+  <rect x="535" y="508" width="30" height="6" rx="3" fill="#34d399" opacity="0.7"/>
+  <rect x="570" y="508" width="30" height="6" rx="3" fill="#34d399" opacity="0.2"/>
+  <text x="630" y="514" font-family="monospace" font-size="8" fill="#64748b">complexity</text>
+
+  <!-- ─── ReBAC Column (right) ─── -->
+  <rect x="780" y="240" width="320" height="290" rx="14" fill="url(#cardGrad)" stroke="#fbbf24" stroke-opacity="0.5" stroke-width="1.5"/>
+  <text x="940" y="272" text-anchor="middle" font-family="monospace" font-size="16" font-weight="700" fill="#fde68a">ReBAC</text>
+  <text x="940" y="292" text-anchor="middle" font-family="monospace" font-size="10" fill="#fbbf24" opacity="0.7">Relationship-Based</text>
+  <line x1="780" y1="304" x2="1100" y2="304" stroke="#fbbf24" stroke-opacity="0.15" stroke-width="1"/>
+
+  <!-- ReBAC diagram: graph nodes -->
+  <circle cx="850" cy="340" r="16" fill="url(#rebacGrad)" stroke="#fbbf24" stroke-opacity="0.5" stroke-width="1"/>
+  <text x="850" y="344" text-anchor="middle" font-family="monospace" font-size="7" fill="#fde68a">user</text>
+
+  <circle cx="940" cy="320" r="16" fill="url(#rebacGrad)" stroke="#fbbf24" stroke-opacity="0.5" stroke-width="1"/>
+  <text x="940" y="324" text-anchor="middle" font-family="monospace" font-size="7" fill="#fde68a">org</text>
+
+  <circle cx="940" cy="368" r="16" fill="url(#rebacGrad)" stroke="#fbbf24" stroke-opacity="0.5" stroke-width="1"/>
+  <text x="940" y="372" text-anchor="middle" font-family="monospace" font-size="7" fill="#fde68a">shop</text>
+
+  <circle cx="1040" cy="344" r="16" fill="url(#rebacGrad)" stroke="#fbbf24" stroke-opacity="0.5" stroke-width="1"/>
+  <text x="1040" y="348" text-anchor="middle" font-family="monospace" font-size="7" fill="#fde68a">prod</text>
+
+  <!-- ReBAC edges -->
+  <line x1="866" y1="336" x2="924" y2="324" stroke="#fbbf24" stroke-width="1" opacity="0.5" marker-end="url(#arrowAmber)"/>
+  <line x1="866" y1="346" x2="924" y2="364" stroke="#fbbf24" stroke-width="1" opacity="0.5" marker-end="url(#arrowAmber)"/>
+  <line x1="952" y1="332" x2="948" y2="352" stroke="#fbbf24" stroke-width="1" opacity="0.4" stroke-dasharray="3,2"/>
+  <line x1="956" y1="368" x2="1024" y2="350" stroke="#fbbf24" stroke-width="1" opacity="0.5" marker-end="url(#arrowAmber)"/>
+
+  <text x="895" y="324" text-anchor="middle" font-family="monospace" font-size="6" fill="#fbbf24" opacity="0.7">admin</text>
+  <text x="898" y="362" text-anchor="middle" font-family="monospace" font-size="6" fill="#fbbf24" opacity="0.7">collab</text>
+  <text x="965" y="346" text-anchor="middle" font-family="monospace" font-size="6" fill="#fbbf24" opacity="0.5">parent</text>
+
+  <!-- ReBAC description -->
+  <text x="940" y="410" text-anchor="middle" font-family="monospace" font-size="9" fill="#94a3b8">"What is your relationship?"</text>
+  <text x="940" y="430" text-anchor="middle" font-family="monospace" font-size="8" fill="#64748b">Graph traversal</text>
+  <text x="940" y="445" text-anchor="middle" font-family="monospace" font-size="8" fill="#64748b">Permission inheritance</text>
+  <text x="940" y="460" text-anchor="middle" font-family="monospace" font-size="8" fill="#64748b">Reverse lookups</text>
+
+  <!-- ReBAC tech -->
+  <rect x="820" y="472" width="240" height="24" rx="4" fill="#78350f" stroke="#fbbf24" stroke-opacity="0.2" stroke-width="1"/>
+  <text x="940" y="488" text-anchor="middle" font-family="monospace" font-size="8" fill="#fbbf24">SpiceDB · OpenFGA · Zanzibar</text>
+
+  <!-- Complexity indicator -->
+  <rect x="860" y="508" width="30" height="6" rx="3" fill="#fbbf24" opacity="0.7"/>
+  <rect x="895" y="508" width="30" height="6" rx="3" fill="#fbbf24" opacity="0.7"/>
+  <rect x="930" y="508" width="30" height="6" rx="3" fill="#fbbf24" opacity="0.7"/>
+  <text x="990" y="514" font-family="monospace" font-size="8" fill="#64748b">complexity</text>
+
+  <!-- ─── Progression arrows ─── -->
+  <line x1="385" y1="385" x2="415" y2="385" stroke="#6366f1" stroke-width="1.5" opacity="0.4" marker-end="url(#arrowIndigo)"/>
+  <line x1="745" y1="385" x2="775" y2="385" stroke="#6366f1" stroke-width="1.5" opacity="0.4" marker-end="url(#arrowIndigo)"/>
+
+  <!-- ─── Bottom tag row ─── -->
+  <rect x="200" y="560" width="800" height="1" rx="0.5" fill="#6366f1" opacity="0.12"/>
+  <text x="600" y="595" text-anchor="middle" font-family="monospace" font-size="12" fill="#6b7280">
+    roles · policies · relationships · OPA · Cerbos · SpiceDB · OpenFGA · Zanzibar
+  </text>
+</svg>
