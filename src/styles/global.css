@@ -208,6 +208,17 @@
   margin-bottom: 1.5rem;
 }
 
+/* Wide tables — scroll horizontally on small viewports instead of
+   expanding the page width. display:block is required because CSS
+   overflow has no effect on display:table elements. Inner table
+   elements (thead/tbody/tr/td) keep their native display values,
+   so the visual layout is unchanged on larger screens. */
+.prose :where(table) {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 @media print {
   header,
   footer,
