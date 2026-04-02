@@ -3,9 +3,11 @@ import { Mermaid } from "@/components/Mermaid";
 
 interface Props {
   code: string;
+  width?: string;
+  maxWidth?: string;
 }
 
-const { code } = Astro.props;
+const { code, width, maxWidth } = Astro.props;
 ---
 
-<Mermaid client:load code={code} />
+<Mermaid client:load code={code} width={width} maxWidth={maxWidth} />

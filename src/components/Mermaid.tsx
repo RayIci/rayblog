@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 
 interface Props {
   code: string;
+  width?: string;
+  maxWidth?: string;
 }
 
-export function Mermaid({ code }: Props) {
+export function Mermaid({ code, width, maxWidth }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>("");
 
@@ -42,7 +44,10 @@ export function Mermaid({ code }: Props) {
 
   if (!svg) {
     return (
-      <div className="bg-muted/40 my-6 flex h-32 items-center justify-center rounded-xl">
+      <div
+        className="bg-muted/40 my-6 mx-auto flex h-32 items-center justify-center rounded-xl"
+        style={{ width, maxWidth }}
+      >
         <span className="text-muted-foreground text-sm">Loading diagram…</span>
       </div>
     );
@@ -51,7 +56,8 @@ export function Mermaid({ code }: Props) {
   return (
     <div
       ref={ref}
-      className="not-prose my-6 flex justify-center overflow-x-auto rounded-xl"
+      className="not-prose my-6 mx-auto flex justify-center overflow-x-auto rounded-xl"
+      style={{ width, maxWidth }}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
